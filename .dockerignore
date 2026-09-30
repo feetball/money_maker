@@ -1,0 +1,19 @@
+# runtime state and local config are bind-mounted, never baked in
+data/
+config.yaml
+research/
+
+# build artefacts / caches
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/screenshots/
+
+# not needed at runtime
+tests/
+docs/
+.git/

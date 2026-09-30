@@ -1,0 +1,23 @@
+# kalshibot (PAPER trading only). Use ./deploy.sh rather than calling compose directly:
+# it creates config.yaml/data/ first and refuses to start next to a native `kalshibot serve`.
+services:
+  kalshibot:
+    build: .
+    image: kalshibot:latest
+    container_name: kalshibot
+    restart: unless-stopped
+    ports:
+      # Bound to localhost only; forward the port (VS Code / ssh -L) to view it remotely.
+      - "${KALSHIBOT_BIND:-127.0.0.1}:${KALSHIBOT_PORT:-8765}:8765"
+    volumes:
+      - ./data:/app/data                    # paper account (SQLite) - survives rebuilds
+      - ./config.yaml:/app/config.yaml      # settings (created from config.example.yaml)
+      - ./research:/app/research:ro         # historical datasets for backtests
+    environment:
+      TZ: ${TZ:-UTC}
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

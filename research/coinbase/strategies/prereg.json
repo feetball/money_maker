@@ -1,0 +1,27 @@
+{
+ "written_at_utc": "2026-09-27, before any strategy result was computed",
+ "cost_model": {
+  "default": "US Intro tier TAKER 0.90% per side (Coinbase Advanced, effective 2026-09-16, docs/coinbase_api_notes.md s3.1) + per-product slippage = median $10k market-order cost vs mid from book_snapshot (includes half-spread), floor 2 bps, fallback 20 bps for products not in the snapshot",
+  "sensitivity_taker": [0.012, 0.006, 0.0025, 0.0],
+  "execution": "signal on daily close t (UTC day), trade at open of day t+1 (=close t + a few seconds); open-to-open returns; delisted/suspended holding sold at its last close"
+ },
+ "windows": {"train": ["2018-01-01", "2023-12-31"], "test": ["2024-01-01", "2026-09-26"],
+             "rolling_origin": "expanding window from 2018-01-01, re-select at each year end 2020..2025, trade next calendar year"},
+ "selection_rule": "per family and per asset set: highest TRAIN Sharpe (daily, 365-day annualisation, rf=0) net of default costs; tie -> lower turnover. Test numbers of ALL configs are also reported (median) to show selection robustness.",
+ "families": {
+  "A_trend": {"assets": ["BTC-USD", "ETH-USD", "EW PIT top-5 (per-asset filter)", "EW PIT top-10 (per-asset filter)"],
+              "rules": {"sma": {"N": [20, 50, 100, 200], "buffer": [0.0, 0.02]},
+                        "ema": {"N": [20, 50, 100, 200], "buffer": [0.0, 0.02]},
+                        "donchian": {"entry_exit": [[20, 10], [50, 25], [100, 50], [200, 100]]},
+                        "dualma": {"fast_slow": [[10, 50], [20, 50], [20, 100], [50, 200]]}},
+              "basket_rebalance": "entries/exits on signal flips; drifted weights reset to 1/N at month start only if |w-1/N| > 0.5/N"},
+  "B_voltarget": {"assets": ["BTC-USD", "ETH-USD", "EW PIT top-10"], "signal": ["always", "sma50", "sma100", "sma200"],
+                  "target_vol": [0.3, 0.4, 0.5, 0.6], "vol_est": "30d close-close stdev x sqrt(365)", "cap": 1.0,
+                  "band_abs_weight": [0.10, 0.25]},
+  "C_xsec_momentum": {"universe_topU_by_trailing30d_usd_volume": [25, 50], "lookback_weeks": [4, 8, 12], "k": [3, 5, 10],
+                      "btc_filter": ["none", "sma50", "sma200"], "rebalance": "weekly, signal Sunday close, trade Monday 00:00 UTC open; equal weight 1/k; continuing names re-weighted only if |w-1/k| > 0.5/k"},
+  "D_hourly_meanrev_control": {"products": "21 hourly products (survivorship-selected; control only)", "h_hours": [1, 4, 24], "z_entry": [-2.0, -3.0], "hold_hours": [4, 24],
+                               "rule": "z = h-hour return / its 30-day (720h) rolling stdev at close of hour t; if flat and z <= z_entry buy at open t+1, sell at open t+1+hold; equal capital per product"},
+  "E_baselines": ["buy&hold BTC", "buy&hold ETH", "EW PIT top-10 monthly rebalanced", "EW PIT top-5 monthly", "monthly DCA into BTC over the window"]
+ }
+}

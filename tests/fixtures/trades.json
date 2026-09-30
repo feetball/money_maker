@@ -1,0 +1,149 @@
+{
+ "cursor": "EhIKEAcjoC3A-YpmmnMbhKkwJwwaDAjenuHVBhDYydijAQ",
+ "trades": [
+  {
+   "count_fp": "113.90",
+   "created_time": "2026-09-26T23:04:12.72291Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8700",
+   "taker_book_side": "ask",
+   "taker_outcome_side": "no",
+   "taker_side": "no",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02e-ce79-bd02-58fa-ca93260b800f",
+   "yes_price_dollars": "0.1300"
+  },
+  {
+   "count_fp": "10.00",
+   "created_time": "2026-09-26T23:04:11.793723Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8800",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02e-de19-acbe-13d3-36ece99be6ab",
+   "yes_price_dollars": "0.1200"
+  },
+  {
+   "count_fp": "5.00",
+   "created_time": "2026-09-26T23:04:11.793723Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8800",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02e-de19-a7e0-0383-d2e6a7e3aea0",
+   "yes_price_dollars": "0.1200"
+  },
+  {
+   "count_fp": "50.00",
+   "created_time": "2026-09-26T23:04:11.793723Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8800",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02e-de19-a65f-16bf-edf1bc2eee23",
+   "yes_price_dollars": "0.1200"
+  },
+  {
+   "count_fp": "31.00",
+   "created_time": "2026-09-26T23:04:11.568622Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8900",
+   "taker_book_side": "ask",
+   "taker_outcome_side": "no",
+   "taker_side": "no",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02e-de19-99e8-bd67-cf30dffc8e6f",
+   "yes_price_dollars": "0.1100"
+  },
+  {
+   "count_fp": "1.00",
+   "created_time": "2026-09-26T23:04:11.19855Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8800",
+   "taker_book_side": "ask",
+   "taker_outcome_side": "no",
+   "taker_side": "no",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02d-4ab9-997c-e50c-b0e6d173411c",
+   "yes_price_dollars": "0.1200"
+  },
+  {
+   "count_fp": "53.26",
+   "created_time": "2026-09-26T23:04:10.148273Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8700",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02e-c6e1-9410-669b-ef9f8da59800",
+   "yes_price_dollars": "0.1300"
+  },
+  {
+   "count_fp": "10.00",
+   "created_time": "2026-09-26T23:04:07.647298Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8800",
+   "taker_book_side": "ask",
+   "taker_outcome_side": "no",
+   "taker_side": "no",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02d-4e91-aa9e-fe56-fd2392663541",
+   "yes_price_dollars": "0.1200"
+  },
+  {
+   "count_fp": "36.25",
+   "created_time": "2026-09-26T23:04:02.875683Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8700",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02d-8779-8152-1b1e-07095c35aefc",
+   "yes_price_dollars": "0.1300"
+  },
+  {
+   "count_fp": "0.75",
+   "created_time": "2026-09-26T23:04:02.035279Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8800",
+   "taker_book_side": "ask",
+   "taker_outcome_side": "no",
+   "taker_side": "no",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02d-bcb1-95c2-4890-c6249c6b3bd9",
+   "yes_price_dollars": "0.1200"
+  },
+  {
+   "count_fp": "202.07",
+   "created_time": "2026-09-26T23:03:59.931364Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8700",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02d-f059-bdd2-f457-e6467ce2e308",
+   "yes_price_dollars": "0.1300"
+  },
+  {
+   "count_fp": "36.25",
+   "created_time": "2026-09-26T23:03:58.343287Z",
+   "is_block_trade": false,
+   "no_price_dollars": "0.8700",
+   "taker_book_side": "bid",
+   "taker_outcome_side": "yes",
+   "taker_side": "yes",
+   "ticker": "KXBTCD-26SEP2620-T84499.99",
+   "trade_id": "0723a02d-c0f9-8a66-9a73-1b84a930270c",
+   "yes_price_dollars": "0.1300"
+  }
+ ]
+}

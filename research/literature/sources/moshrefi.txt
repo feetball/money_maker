@@ -1,0 +1,408 @@
+                                            Prices, Probabilities, and Parlays: Systematic Bias
+                                                       in Sports Prediction Markets
+                                                                                                Niusha Moshrefi
+                                                                                     Princeton University, Princeton, NJ, USA
+                                                                                           niusha@princeton.edu
+
+
+                                            Abstract—Prediction market prices are routinely interpreted as      A prediction market is calibrated if contracts trading at price
+                                         probabilities, both in academic work and in derivative products        p resolve in favor of the event with frequency p. Most of
+                                         built atop these markets. We document two systematic ways              the prediction-market bias literature treats calibration as a
+                                         this interpretation fails on Kalshi, a major U.S. event-contract
+                                         exchange, using 23 million moneyline trades across major sport         static property of a market — a single calibration curve fit
+                                         leagues. First, calibration, the agreement between quoted prices       to all trades — and documents level effects such as the
+                                         and realized event frequencies, is not a static property of a          favorite-longshot bias [12], [13]. We instead slice the data
+                                         contract: fitting calibration models within time-to-expiry buckets,    by time remaining until contract settlement and show that
+                                         we find that parameters sit at their perfect-calibration reference     the calibration function itself is a non-trivial function of that
+                                         values in the middle of a contract’s life but depart sharply as
+                                         expiry approaches. In the final ten minutes before settlement the      time. The market is not simply biased; the structure of its bias
+                                         empirical calibration curve becomes step-like, fitting a Prelec        evolves predictably as expiry approaches.
+arXiv:2607.14430v1 [cs.SI] 15 Jul 2026
+
+
+
+
+                                         form with curvature parameter well above one — the opposite               Figure 1 previews the two empirical findings around which
+                                         sign of the canonical lottery-choice fit, consistent with insurance-   the paper is organized: single-contract calibration depends
+                                         demand behavior by traders holding losing positions. Second,           sharply on time-to-expiry (left panel), and the parlay product
+                                         cross-game parlays on Kalshi are systematically overpriced
+                                         relative to the product of their contemporaneous leg prices,           built on top of these contracts is systematically overpriced in
+                                         with overpricing growing in leg count. This holds when the             a leg-count-dependent way (right panel).
+                                         parlay legs are drawn from the TTE regime in which leg-                   We make three contributions.
+                                         level calibration is essentially perfect, indicating a separate,          • First, we document that calibration curves in sports pre-
+                                         market-level markup at the parlay-pricing stage. Both deviations             diction markets vary systematically with time-to-expiry,
+                                         are systematic and therefore admit computational correction.
+                                         Practical use of prediction-market prices as probabilities requires          and we characterize this variation parametrically. Fitting
+                                         conditioning on time to expiry and on product type, not on price             a quadratic-in-logit specification to trades grouped by
+                                         alone.                                                                       time-to-expiry bucket, we find that the curve parameters
+                                            Index Terms—prediction markets, calibration, probability es-              themselves trace out a U-shape. Contracts traded well
+                                         timation, parlay pricing, event contracts, Kalshi, market mi-                before tip-off or first pitch, and contracts traded near
+                                         crostructure
+                                                                                                                      the final whistle, are the most miscalibrated, while trades
+                                                                                                                      during the bulk of in-game play lie closest to the diagonal.
+                                                                I. I NTRODUCTION
+                                                                                                                      This pattern is robust across three major leagues — the
+                                            Prediction markets have moved from academic curiosity                     NBA, NHL, and MLB — suggesting a structural feature
+                                         to mainstream financial instrument. The two largest event-                   of how these markets aggregate information rather than
+                                         contract platforms, Kalshi and Polymarket, collectively passed               a quirk of any one sport.
+                                         $150 billion in lifetime trading volume in April 2026 [6]. A              • Second, we show that calibration curves near expiry are
+                                         foundational claim underwrites this growth, that the market                  not merely more biased but qualitatively different in
+                                         price of a binary contract paying $1 on event A can be                       shape: they become Prelec-like [18], consistent with a
+                                         read directly as the market’s probability estimate of A [8].                 probability-weighting distortion of the kind documented
+                                         This interpretation is invoked by traders sizing positions, by               in cumulative prospect theory [17]. We interpret this
+                                         researchers using prices as belief proxies, and increasingly by              as evidence of insurance-demand behavior — traders
+                                         mainstream media — the Wall Street Journal, through its data                 holding losing positions late in a game face increasingly
+                                         partnership with Polymarket, has run headlines of the form                   convex losses and hedge by paying premiums on the
+                                         “Polymarket Bets See Over 70% Chance of U.S. . . . ” [7] —                   opposing side — and we discuss alternative explanations
+                                         and, most consequentially for this paper, by the construction of             that our data cannot fully rule out.
+                                         derivative products such as parlays whose payoffs are explicit            • Third, we show that even when single-leg prices are well-
+                                         functions of underlying contract prices.                                     calibrated, derivative products built from them are not.
+                                            This paper argues that the price-as-probability interpretation            Treating cross-game parlays as a market-implied estimate
+                                         is systematically wrong in a way that matters for downstream                 of a joint probability, we find that parlay prices on
+                                         applications, and it does so by examining a dimension of                     Kalshi are systematically too high relative to the product
+                                         miscalibration that has received little attention: time to expiry.           of contemporaneous leg prices, with median overpricing
+Fig. 1. Left: Single-contract calibration exponent γ̂ versus time-to-expiry, pooled per league; γ̂ ≈ 1 in the middle of a contract’s life and rises sharply near
+settlement. Right: Overpricing parameter δ̂ from Ĉ(p) = p − δ p(1 − p), fit per leg count on cross-game parlays whose legs lie in the calibrated regime on
+the left.
+
+
+     growing geometrically in the number of legs. We show                        Rana et al. [10] propose an automated market-making design
+     parlay overpricing cannot be inherited from leg-level mis-                  that prices parlay-style joint contracts within a unified liq-
+     calibration; together with the cross-game restriction that                  uidity pool, representing the joint distribution via a pairwise
+     substantially reduces dependence, it points to a separate,                  exponential-family model. Our work is complementary: rather
+     market-level markup imposed at the parlay-pricing stage.                    than designing a coherent mechanism for joint pricing, we
+   The implications run in two directions. For practitioners                     measure how badly existing platforms misprice joint contracts
+and researchers using prediction-market prices as probability                    when leg prices are simply multiplied, and show that this mis-
+inputs, our results indicate that any such use should condition                  pricing persists even when the underlying legs are themselves
+on both time-to-expiry and product type — a single-leg price                     well-calibrated — pointing to a markup applied at the parlay-
+in the middle of a contract’s life behaves like a probability,                   pricing stage rather than to compounded leg-level distortion.
+while the same contract in its final minutes or assembled into a                       b) Systematic biases in prediction and sports-betting
+parlay does not. For market microstructure, the time-evolution                   markets: Against the efficiency baseline, a substantial em-
+of the calibration function offers a new empirical handle on the                 pirical literature documents systematic deviations. The most
+behavioral and informational forces shaping price formation in                   extensively studied is the favorite-longshot bias. In many bet-
+event-contingent contracts.                                                      ting markets, contracts on longshots are overpriced relative to
+                                                                                 their empirical winning frequencies, and contracts on favorites
+                         II. R ELATED W ORK
+                                                                                 underpriced [11]–[13]. The direction of the bias is not univer-
+   Our paper sits at the intersection of two literatures: infor-                 sal — a reverse favorite-longshot bias has been documented
+mation aggregation in prediction markets, and documented                         in MLB and NHL money-line markets and in some US point-
+systematic biases in prediction and sports-betting prices. We                    spread markets, with the direction depending on whether the
+discuss each in turn and position our contribution.                              favorite’s win probability lies above or below one half [15],
+     a) Information aggregation in prediction markets: A                         [16]. Proposed explanations include risk-loving preferences
+foundational line of work argues that markets in event-                          over longshots [13], bookmaker behavior in the presence of
+contingent contracts efficiently aggregate dispersed private                     insider traders [14], and bookmaker risk aversion in com-
+information, yielding prices that can be interpreted as market-                  petitive fixed-odds markets [16]. Bürgi et al. [3] document a
+aggregated probability forecasts [8], [9]. Empirical studies                     favorite-longshot bias on Kalshi using 300K transaction-level
+have generally found that such forecasts are accurate on                         contracts across all market categories; we differ by stratifying
+average and outperform standard polling or expert benchmarks                     on time-to-expiry within sports, which reveals non-monotonic
+across a range of domains, from political elections to cor-                      calibration dynamics that aggregate analyses smooth over.
+porate sales forecasts [8]. This literature supplies both the                    A separate, behaviorally motivated thread relates calibration
+practical motivation for the price-as-probability interpretation                 distortions to non-linear probability weighting of the kind
+we examine and the empirical baseline against which we                           formalized by Tversky and Kahneman [17] and Prelec [18],
+measure deviations. Closer to our downstream analysis, a                         the latter of whom derives the compound-invariant family
+smaller but growing literature studies how prediction-market                     w(p) = exp{−(− ln p)α } axiomatically; we adopt this func-
+mechanisms can be extended to joint events. Most recently,                       tional form for our near-expiry calibration fits in Section IV.
+Across both threads, however, calibration is treated as a static,    late-game activity. TTE is the central conditioning variable of
+level-dependent property of a market. To our knowledge,              the paper.
+no prior work systematically characterizes how the shape                We group trades into five TTE buckets with right-open
+of the calibration function varies with time-to-expiry within        intervals
+event-contingent markets. Filling that gap is the empirical
+contribution of this paper.
+                                                                             B1 = [0, 10), B2 = [10, 30), B3 = [30, 90),
+                III. DATA AND D EFINITIONS                                                 B4 = [90, 240), B5 = [240, ∞),
+   This section describes the trade-level data used throughout
+                                                                        all in minutes. The boundaries are approximately log-spaced
+the paper and formalizes the calibration objects we estimate
+                                                                     and were chosen to give finer resolution near expiry, where
+in Sections IV.
+                                                                     we anticipate the most rapid evolution of calibration, while
+A. Data                                                              still placing a non-trivial number of trades in each bucket. We
+                                                                     summarize each bucket by its midpoint (5, 20, 60, 165, and
+   We obtain trade-level data from Kalshi, the largest CFTC-
+                                                                     360 minutes respectively) when plotting parameter trajectories
+regulated event-contract exchange in the United States, cover-
+                                                                     against τ ; the rightmost bucket is unbounded above, and we
+ing the regular-season moneyline markets of three major North
+                                                                     treat its midpoint as 360 minutes for visualization only.
+American sports leagues: the National Basketball Association
+(NBA), Major League Baseball (MLB), and the National                 C. Calibration
+Hockey League (NHL). A moneyline market on a given game                 We adopt the standard definition of the calibration function
+is a pair of binary contracts that pay $1 if the designated team     of a probability forecast. For a given (possibly conditional)
+wins outright and $0 otherwise; by construction at each time         set of trades, calibration is the conditional expectation of the
+the two contract prices sum to one, modulo the bid-ask spread.       outcome given the price:
+   Our sample spans early March through mid-May 2026. The
+window is bounded on the right by the end of our data feed and                             C(p) = E[Y |P = p]
+on the left by the start of each league’s covered season activity,
+                                                                       A forecast is perfectly calibrated if C(p) = p for all p in the
+which yields 11 weeks of trades for the NBA, 10 weeks for
+                                                                     support, i.e., contracts trading at a price of p resolve favorably
+the NHL, and 7 weeks for the MLB. After excluding all
+                                                                     with empirical frequency p. Deviations from the diagonal
+canceled and voided markets, the sample contains approxi-
+                                                                     C(p) = p are the object of interest. Empirical estimation of C
+mately 23 million executed moneyline trades: 13,009,643 for
+                                                                     on a finite sample is performed by grouping trades into price
+the NBA, 7,148,254 for the MLB, and 2,819,289 for the NHL.
+                                                                     bins and computing the within-bin empirical win rate.
+Each trade record consists of a contract identifier, an execution
+timestamp, an executed price (in cents), an executed size, and         IV. T IME - TO -E XPIRY-C ONDITIONAL M ISCALIBRATION
+— once the underlying game settles — a binary outcome                   This section presents the central empirical result of the
+indicator. Settlement is determined by the platform; we do           paper. For each league we estimate the power-law parameter
+not re-derive outcomes from external sources.                        γ and the Platt slope a within each of the five TTE buckets
+   We let i index trades, write pi ∈ (0, 1) for the executed         defined in Section III-B, then fit the quadratic-in-log meta-
+price expressed as a probability (cents divided by 100), and         model to characterize how these parameters evolve with time
+write Yi ∈ {0, 1} for the realized outcome of the contract on        to expiry. We find that both calibration parameters depart
+which trade i was executed. All reported prices are contract         sharply from their perfect-calibration reference value of one
+execution prices and exclude exchange fees. Fees are charged         as expiry approaches, and that this pattern is consistent across
+separately, on top of the trade price.                               all three leagues despite differences in their long-horizon
+B. Time to Expiry                                                    behavior.
+   For each trade i, we define time to expiry (TTE) as the time      A. Estimation
+elapsed between the trade timestamp and the market closing              For each league ℓ and TTE bucket b, we pool all trades
+time of the underlying contract:                                     across the league’s covered weeks and fit two parametric
+                                                                     calibration models to the bucketed
+                                                                                                             trades: the power-law
+                  τi = tclose − ttrade ≥ 0.                          Ĉ(p) = pγ / pγ + (1 − p)γ , and Platt scaling Ĉ(p) =
+                        i        i
+                                                                     σ a logit(p)+b . Both fits are weighted by trade count within
+   Here, tclose denotes the exchange’s market close time—            price bins. This yields ten parameter estimates per league:
+the scheduled end of trading, which for our sports markets           five values of γ̂ℓ,b and five values of âℓ,b , indexed by bucket
+coincides with the end of the game. We do not use the venue’s        midpoint τb ∈ {5, 20, 60, 165, 360} minutes.
+later administrative settlement timestamp.                              We then fit the meta-model θ(τ ) = c0 +c1 log τ +c2 (log τ )2
+   We measure τ in minutes throughout the paper. A trade             separately to each parameter trajectory. Model selection be-
+with τi large corresponds to early speculation well before a         tween this quadratic-in-log specification and the restricted
+game begins; a trade with τi small corresponds to in-game or         linear-in-log alternative (c2 = 0) is performed by AIC; the
+quadratic is preferred for both γ and a across all three leagues,   D. The Near-Expiry Distortion as Probability Weighting
+and BIC agrees.                                                        The 0–10 minute calibration curves in Figure 3 exhibit
+                                                                    a sharpness at the midpoint that the power-law and Platt
+B. Miscalibration Evolving Shape                                    families cannot reproduce. We fit the two-parameter Prelec-
+                                                                    II weighting function [18], w(p) = exp{−β(− ln p)α }, with
+   Figure 2 reports the parameter trajectories for the NBA,
+                                                                    α, β > 0, to the isotonic-smoothed empirical calibration curve
+MLB, and NHL together with their fitted quadratic-in-log
+                                                                    in each (league, bucket) cell. Perfect calibration corresponds
+meta-curves. Two patterns are visible across all three leagues.
+                                                                    to (α, β) = (1, 1); the fixed point p⋆ is determined jointly by
+     a) First, calibration deteriorates sharply near expiry.:       both parameters and is not pinned to the canonical 1/e of the
+Both γ̂ and â are well above their perfect-calibration reference   one-parameter Prelec-I form.
+value of one in the smallest TTE bucket. The 5-minute bucket           Figure 4 reports the fits for the two TTE buckets nearest
+yields γ̂ ∈ [1.27, 1.31] across leagues and â ranging from 1.62    expiry. The Prelec distortion is not a constant feature of
+for the NBA to 4.56 for the NHL, with MLB at 2.05. Values           these markets but emerges sharply as expiry approaches.
+of γ and a above one indicate that the calibration function is      Section IV-B established that across the bulk of the TTE range
+S-shaped relative to the diagonal: contracts trading at prices      — from hours before settlement down to roughly half an
+near 0 resolve favorably less often than those prices suggest,      hour — calibration parameters sit near their perfect-calibration
+and contracts trading at prices near 1 resolve favorably more       reference values, and the empirical curve coincides with the
+often. The magnitude of this distortion in the smallest bucket      diagonal. By the 10–30 minute bucket a mild Prelec shape has
+is substantial—at â = 4.57 for NHL, a contract trading at          begun to form. In the final 10 minutes, the Prelec fit tracks a
+p = 0.4 has an empirical win rate near zero in our data, far        step-like curve. Whatever mechanism produces the distortion
+below any plausible probability interpretation of the price.        therefore activates only in the closing minutes of trading —
+     b) Second, both calibration models agree on the qualita-       a demand component absent for the bulk of a contract’s life
+tive pattern.: Across all three leagues, γ̂ and â co-vary: when    and dominating its final moments.
+one is far from its reference value, so is the other. This is          The direction of the fitted distortion is the inverse of the
+reassuring because the two models impose different functional       canonical probability-weighting result. Lottery-choice settings
+forms on the calibration curve, and a distortion visible in only    typically yield α̂ < 1 [17], [18]. Our near-expiry fits yield
+one would be suspect as a model artifact rather than a property     α̂ > 1 and the opposite S-shape: prices in the interior of
+of the market.                                                      (0, 1) are pulled away from 1/2 toward 0 or 1. This is not the
+   The meta-fits are tight: quadratic-in-log R2 values exceed       prospect-theory picture of a gambler overweighting a longshot;
+0.92 across all six trajectories, and AIC and BIC consistently      it is the picture of a risk-averse trader treating a moderately
+prefer the quadratic over a linear-in-log alternative.              unfavorable position as nearly certain to lose, and paying a
+                                                                    premium on the opposing side to escape it. The magnitude
+C. Inside the Calibration Curve                                     of the distortion varies across leagues in the order NHL >
+                                                                    MLB > NBA, consistent with the degree to which late-game
+   To clarify what the parameter trajectories of Figure 2           outcomes resolve in discrete versus continuous fashion.
+are summarizing, Figure 3 shows the underlying empirical               We interpret the near-expiry Prelec shape as a market-
+calibration curves for the NHL in each of the five TTE buckets,     level signature of insurance demand: traders holding losing
+with the fitted power-law and Platt curves overlaid.                positions in the final minutes face convex losses that make
+   In the 30–90 and 90–240 minute buckets, the empirical cal-       paying above the fair price on the opposing side rational under
+ibration curve is visually indistinguishable from the diagonal      expected utility, even though it is irrational under probability
+across the entire (0, 1) price range. In the middle of the TTE      matching. Aggregated, this hedging activity compresses the
+range, the market is well-calibrated.                               calibration curve toward the step shape we observe. Alternative
+   In the 0–10 minute bucket, the calibration curve departs         mechanisms—liquidity withdrawal by informed participants,
+from the diagonal not as a smooth S-shape but as something          entry of uninformed late traders, herding on visible game
+closer to a step function. The empirical outcome rate sits at       state—could produce a qualitatively similar pattern, and dis-
+essentially zero across prices below 0.4—contracts trading at       tinguishing them requires order-book and trader-identity data
+10–40 cents in the final ten minutes resolve favorably almost       beyond our scope. What our fits establish is the shape and
+never—transitions sharply around p ≈ 0.5, and saturates near        magnitude of the distortion itself: in the final ten minutes
+one across the upper half. The shape more closely resem-            before settlement, sports prediction-market prices deviate from
+bles a Prelec-style probability-weighting distortion with high      probabilities by an amount that is large, systematic, and
+curvature than the smooth S-shapes the power-law and Platt          consistent across three major leagues.
+families can produce. Across all three leagues the asymmetry
+is consistent: large distortion approaching expiry, small or        V. PARLAY P RICING : M ARKUP IN A C ALIBRATED R EGIME
+noisy distortion long before it. This near-expiry concentration       The first half of this paper established that single-leg mon-
+is the empirical anchor for the behavioral interpretation we        eyline prices on Kalshi are well-calibrated in the middle of the
+develop next.                                                       TTE range and exhibit a sharp Prelec-like distortion only in the
+Fig. 2. Pooled calibration parameters as a function of time to expiry, for the NBA (top left), MLB (top right), and NHL (bottom left). Within each panel,
+the left subplot shows the power-law exponent γ̂ and the right subplot the Platt slope â, each plotted against the TTE bucket midpoint in minutes. Dashed
+reference line at one corresponds to perfect calibration. Dashed curve is the fitted quadratic-in-log meta-model; legend reports its R2 and p-value on the
+quadratic term.
+
+
+
+
+Fig. 3. Pooled NHL calibration curves by TTE bucket. Each panel shows the empirical outcome rate (blue dots) and isotonic-smoothed curve (dashed) as
+a function of executed market price, with the fitted power-law (red) and Platt (orange) overlays. Bucket-level trade counts and fitted parameters γ̂ and â are
+reported in each panel title. The diagonal corresponds to perfect calibration.
+
+
+
+final minutes before settlement. We now turn to the prediction                   A. Data
+market’s natural derivative product: the parlay. A parlay is a
+                                                                                    The parlay sample is drawn from Kalshi’s parlay trades
+single contract whose payoff depends on the joint occurrence
+                                                                                 over a 15-day window, April 29 through May 13, 2026,
+of n underlying events. Under independence, the fair price
+                                                                                 sitting within the moneyline window of Section III-A. For
+of an n-leg parlay is the product of its leg prices. Treating
+                                                                                 each parlay execution at time ti , we match each constituent
+prediction-market prices as probabilities, a downstream user
+                                                                                 leg to the most recent execution price in the corresponding
+— or a market-maker — who priced a parlay this way would
+                                                                                 single-game contract at or before ti . We retain a parlay only
+be acting consistently with the foundational claim under which
+                                                                                 if every leg has an eligible execution within 300s of the parlay
+the single-leg market operates.
+                                                                                 timestamp. Starting from a base of 153,173 parlay trades for
+   We show that this consistency does not hold empirically.                      which a contemporaneous leg-price independence product can
+Cross-game parlays on Kalshi are systematically priced above                     be computed, we apply three filters designed to isolate parlays
+the product of their contemporaneous leg prices, and the                         whose underlying legs lie in the calibrated regime identified
+magnitude of the overpricing grows with leg count. The legs                      in Section IV. (i) Every leg of the parlay must have time-
+themselves are drawn from the TTE range in which Section IV                      to-expiry between 30 and 240 minutes at the time of the
+established that single-leg calibration is essentially perfect,                  parlay trade. By Section IV, this is the TTE range over which
+so the overpricing cannot be attributed to leg-level distortion                  single-leg calibration parameters sit at their perfect-calibration
+compounding through the product. The deviation originates at                     reference values across all three leagues; restricting to this
+the parlay-pricing stage.                                                        range means leg-level miscalibration cannot contribute to any
+Fig. 4. Prelec-II fits in the two TTE buckets nearest expiry, for all three leagues. Top row: 0–10 minute bucket. Bottom row: 10–30 minute bucket. Each
+panel shows the isotonic-smoothed empirical calibration curve (dashed) and the fitted Prelec-II curve (red), with fitted α̂ and β̂ in the panel title. The diagonal
+corresponds to perfect calibration.
+
+
+
+overpricing we observe. (ii) We restrict to cross-game parlays,                                                TABLE I
+i.e., parlays whose legs reference outcomes of distinct games,                      OVERPRICING RATIO R = P exec /P ind BY LEG COUNT, ON CROSS - GAME
+                                                                                    PARLAYS WHOSE EVERY LEG HAS TTE BETWEEN 30 AND 240 MINUTES .
+excluding same-game combinations where leg outcomes are
+non-trivially correlated. After these filters the analysis sample                         Legs        N      Mean      Median       Std     95% CI (mean)
+contains N = 12,639 parlay trades spanning two to eleven                                     2     5,846     0.994      0.991     0.071      [0.992, 0.996]
+                                                                                             3     3,111     1.006      0.995     0.173      [1.000, 1.012]
+legs.                                                                                        4     1,523     1.022      0.999     0.108      [1.016, 1.027]
+   For each parlay trade i with ni legs, we observe the                                      5       928     1.040      1.005     0.134      [1.031, 1.049]
+executed parlay price Piexec ∈ (0, 1) and the contemporaneous                                6       584     1.120      1.013     1.176      [1.024, 1.215]
+                                                                                             7       371     1.122      1.037     0.299      [1.092, 1.153]
+executed prices {pi,1 , . . . , pi,ni } of its component
+                                                 Qni       legs. The                         8       140     1.353      1.066     2.063      [1.010, 1.696]
+independence-product price is Piind = j=1             pi,j , the fair                        9        67     1.199      1.105     0.305      [1.126, 1.273]
+price of the parlay under the joint hypothesis that (a) leg prices                          10        57     3.078      1.223     7.439      [1.130, 5.026]
+                                                                                            11        12     1.712      1.305     1.050      [1.092, 2.332]
+are probabilities and (b) legs are independent. The overpricing                            All    12,639     1.028      0.996     0.632      [1.017, 1.039]
+ratio is Ri = Piexec /Piind . A value of R = 1 corresponds to
+parlay pricing consistent with the price-as-probability interpre-
+tation under independence; R > 1 corresponds to overpricing.
+                                                                                   independence-product. Second, beyond approximately n = 5,
+B. Overpricing Grows with Leg Count                                                a clear and monotonic growth in median overpricing begins;
+   Figure 5 reports the overpricing ratio R as a function of leg                   1.01 at five legs, 1.07 at eight legs, 1.22 at ten legs, and 1.31
+count, on a log-vertical axis. Table I reports the underlying                      at eleven legs. Third, dispersion grows substantially at high
+statistics. We focus on the median, both because the distribu-                     leg count, with the means at n = 8 and n = 10 reflecting
+tion of R is heavy-tailed at large n and because the median                        heavy upper tails. We treat the n > 10 cells as small-sample
+is the directly interpretable summary of “a typical parlay’s                       evidence of the same trend rather than as separately calibrated
+overpricing factor.”                                                               estimates. Count N falls below 70 in these cells and the heavy
+   Three patterns are visible. First, at low leg counts (n ∈                       right tails make the means unstable. The median, more robust
+2, 3, 4), the median overpricing ratio sits essentially at one—                    to tails, continues to grow smoothly across the range.
+0.991, 0.995, 0.999—and parlay prices are consistent with the                         A simple regression captures the rate. Fitting log R̃(n) =
+Fig. 5. Parlay overpricing ratio R = P exec /P ind by leg count, on a log-vertical axis. Each violin shows the distribution of R for parlays with a given
+number of legs in the analysis sample. Orange bar: median. Red dot: mean. Dashed reference line at R = 1 corresponds to parlay pricing consistent with the
+price-as-probability interpretation under leg independence.
+
+
+
+β0 +β1 n to the median overpricing ratios across leg counts n =               inflation in same-game parlays [1]. (iii) The calibration curve
+2 through 11 yields β̂1 ≈ 0.029 (R2 ≈ 0.94) corresponding to                  at the parlay level is shifted uniformly below the diagonal,
+a per-leg multiplicative inflation of roughly 3% in the median.               as shown in Section V-C, inconsistent with a price-dependent
+The much larger δ̂ values in the headline figure (Figure 1)                   behavioral weighting and consistent with an additive markup.
+come from a parametric model fit to trade-level outcomes                         Markups are well-documented in the conventional sports-
+rather than to the median ratios; the two parameterizations                   book setting, where house edges on multi-leg products are
+summarize the same phenomenon under different functional                      observed to compound substantially above per-leg vig [2],
+forms.                                                                        and have recently been documented on Kalshi specifically for
+                                                                              low-priced single contracts [3]. Our results extend this picture
+C. Calibration of the Parlay Market
+                                                                              to the parlay product: even when individual leg prices are
+   The overpricing-vs-leg-count result of Section V-B captures                unbiased estimators of outcome frequencies, the parlay built
+one dimension of the parlay markup; the calibration curve                     from those legs carries a parlay-level pricing wedge whose
+of the parlay product captures another. Figure 5 reports the                  effective magnitude grows multiplicatively with leg count.
+empirical calibration curve of cross-game parlay trades, pooled                  Whether this markup is best modeled as a fee structure,
+weekly across the analysis window. Following the convention                   a capital-reserve premium against joint-probability estimation
+of Section IV, we plot the empirical win rate as a function                   risk [10], or demand-driven overpayment by traders seeking
+of executed parlay price. We confine the axis to prices below                 lottery-like payoffs [4] cannot be distinguished by our data
+0.6, which contains 98% of trades in the sample.                              alone. What our results establish is: cross-game parlay prices
+   The pattern is qualitatively distinct from the single-leg                  on Kalshi are not the prices the standard price-as-probability
+curves of Section IV. Both weekly curves sit consistently                     interpretation implies. The deviation is systematic, grows with
+below the diagonal across essentially the entire observed price               leg count, takes the form of a roughly uniform downward
+range, with the empirical win rate running between two and                    shift in the calibration curve, and exists in a regime where
+ten percentage points below the price. A parlay priced at                     the underlying legs are calibrated.
+0.30 wins on average about 24% of the time; one priced at
+0.40, about 30%. The shape of the deviation is a roughly                                                VI. C ONCLUSION
+uniform downward shift—consistent with a flat or near-flat
+additive markup over fair pricing rather than a price-dependent                  Prediction market prices are increasingly treated as
+behavioral distortion.                                                        probabilities—by traders, researchers, journalists, and the de-
+                                                                              signers of derivative products built atop these markets. This
+D. Discussion                                                                 paper has examined that interpretation along a dimension that
+   Three observations narrow the possible explanations for the                has received little prior attention, time to expiry, and has
+overpricing. (i) Leg-level calibration is essentially perfect in              documented two distinct ways in which it fails systematically.
+the TTE regime from which parlay legs are drawn, as shown                        First, within a single contract’s life, calibration is not static.
+in Section IV, so leg-level distortion cannot account for the                 Fitting power-law and Platt-scaling calibration models within
+parlay overpricing. (ii) The cross-game restriction means leg                 TTE buckets for moneyline trades on the NBA, MLB, and
+outcomes can reasonably be treated as independent, so the                     NHL, we find that both parameter trajectories depart sharply
+overpricing cannot be attributed to a correlation premium                     from their perfect-calibration reference values as expiry ap-
+of the kind that explains the well-documented house-edge                      proaches, while sitting at those values in the middle of the TTE
+Fig. 6. Empirical calibration of cross-game parlay trades, pooled by week of the analysis window. Left: Week 1 (Apr 29 – May 5). Right: Week 2 (May 6 –
+May 13). Both YES-side and NO-side trades are included; NO-side prices are reflected to the YES perspective for pooling. In each panel the empirical win
+rate (blue dots) and isotonic-smoothed curve (red) are plotted against the executed parlay price. Axes are confined to prices below 0.6, containing 98% of
+trades in the sample. The diagonal corresponds to perfect calibration.
+
+
+
+range. In the final ten minutes before settlement the empirical                 [5] J. Platt, “Probabilistic Outputs for Support Vector Machines and Com-
+calibration curve becomes step-like, fitting a Prelec form with                     parisons to Regularized Likelihood Methods,” in Advances in Large
+                                                                                    Margin Classifiers, A. J. Smola, P. Bartlett, B. Schölkopf, and D.
+curvature parameter α̂ well above one—the opposite sign                             Schuurmans, Eds. MIT Press, 1999, pp. 61–74.
+of the canonical lottery-choice fit, consistent with insurance-                 [6] DefiLlama, “Prediction Market Protocols,” 2026. [Online]. Available:
+demand behavior by traders holding losing positions.                                https://defillama.com/protocols/prediction-market.
+                                                                                [7] Media and Democracy Project, “We need to kick prediction-market
+   Second, this leg-level calibration in the middle of the                          betting out of journalism while we still can,” The Intercept, Apr. 2026.
+TTE range does not transfer to derivative products. Cross-                          [Online]. Available: https://theintercept.com/.
+game parlays on Kalshi, drawn from a sample whose legs                          [8] J. Wolfers and E. Zitzewitz, “Prediction Markets,” Journal of Economic
+                                                                                    Perspectives, vol. 18, no. 2, pp. 107–126, 2004. [Online]. Available:
+fall entirely within the calibrated regime, are systematically                      https://www.aeaweb.org/articles?id=10.1257/0895330041371321.
+overpriced relative to the product of their contemporaneous                     [9] J. Wolfers and E. Zitzewitz, “Five Open Questions About Prediction
+leg prices. Because the underlying legs are calibrated and the                      Markets,” NBER Working Paper No. 12060, Mar. 2006. [Online].
+                                                                                    Available: https://www.nber.org/papers/w12060.
+cross-game restriction precludes a correlation premium, the                    [10] R. Rana, V. Nadkarni, N. Moshrefi, and P. Viswanath, “ParlayMarket:
+deviation originates at the parlay-pricing stage.                                   Automated Market Making for Parlay-style Joint Contracts,” arXiv
+                                                                                    preprint arXiv:2603.22596, Mar. 2026. [Online]. Available: https://arxiv.
+   Together, these findings establish that the price-as-                            org/abs/2603.22596.
+probability interpretation fails in qualitatively different ways               [11] R. H. Thaler and W. T. Ziemba, “Anomalies: Parimutuel Betting Mar-
+at different points in a contract’s life and at different levels                    kets: Racetracks and Lotteries,” Journal of Economic Perspectives, vol.
+                                                                                    2, no. 2, pp. 161–174, 1988.
+of product complexity. Both deviations are systematic: TTE-                    [12] M. Ottaviani and P. N. Sørensen, “The Favorite-Longshot Bias: An
+conditional in the first case, leg-count-dependent in the second.                   Overview of the Main Explanations,” in Handbook of Sports and Lottery
+Both admit computational correction and quantifying the out-                        Markets, D. B. Hausch and W. T. Ziemba, Eds. Elsevier, 2008, pp. 83–
+                                                                                    101.
+of-sample value of such corrections is the natural next step.                  [13] E. Snowberg and J. Wolfers, “Explaining the Favorite-Long Shot Bias:
+Any application of prediction-market prices as probability                          Is It Risk-Love or Misperceptions?,” Journal of Political Economy, vol.
+inputs requires conditioning on both time to expiry and product                     118, no. 4, pp. 723–746, 2010. [Online]. Available: https://www.nber.
+                                                                                    org/papers/w15923.
+type, not on price alone.                                                      [14] H. S. Shin, “Optimal Betting Odds Against Insider Traders,” The
+                                                                                    Economic Journal, vol. 101, no. 408, pp. 1179–1185, 1991.
+                             R EFERENCES                                       [15] P. W. S. Newall and D. Cortis, “Are Sports Bettors Biased toward Long-
+                                                                                    shots, Favorites, or Both? A Literature Review,” Risks, vol. 9, no. 1, art.
+ [1] M. Shackleford, “Same-Game Parlays: The Mathematics of Correlation,”           22, 2021. [Online]. Available: https://www.mdpi.com/2227-9091/9/1/22.
+     Wizard of Odds, 2025. [Online]. Available: https://wizardofodds.com/      [16] K. Whelan, “Risk Aversion and Favourite-Longshot Bias in a Com-
+     article/same-game-parlays-the-mathematics-of-correlation/.                     petitive Fixed-Odds Betting Market,” Economica, vol. 91, no. 361, pp.
+ [2] T. Hegarty and K. Whelan, “Estimating Expected Loss Rates in Betting           188–209, 2024. [Online]. Available: https://onlinelibrary.wiley.com/doi/
+     Markets: Theory and Evidence,” Applied Economics, May 2025. https:             10.1111/ecca.12500.
+     //doi.org/10.1080/00036846.2025.2507979.                                  [17] A. Tversky and D. Kahneman, “Advances in Prospect Theory: Cumu-
+ [3] C. Bürgi, W. Deng, and K. Whelan, “Makers and Takers: The Economics           lative Representation of Uncertainty,” Journal of Risk and Uncertainty,
+     of the Kalshi Prediction Market,” Working paper, 2026. [Online]. Avail-        vol. 5, no. 4, pp. 297–323, 1992.
+     able: https://www.karlwhelan.com/sports-betting-research/.                [18] D. Prelec, “The Probability Weighting Function,” Econometrica, vol.
+ [4] K. Whelan, “The Parlay Puzzle: Expected Utility and Multi-Leg Bet-             66, no. 3, pp. 497–527, 1998. [Online]. Available: https://www.jstor.
+     ting,” Working paper, Mar. 2026. [Online]. Available: https://www.             org/stable/2998573.
+     karlwhelan.com/research/.
+

@@ -1,0 +1,195 @@
+/*
+ * Design tokens. Dark-first; light via prefers-color-scheme (or an explicit
+ * data-theme on <html> from Settings → Theme). Chart roles mirror src/charts/palette.ts
+ * (dataviz reference palette, validated for CVD separation and contrast).
+ */
+:root {
+  color-scheme: dark;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  --topbar-h: 52px;
+  --nav-w: 244px;
+
+  /* surfaces */
+  --bg: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #222220;
+  --surface-3: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: #383835;
+  --row-hover: rgba(255, 255, 255, 0.035);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+
+  /* ink */
+  --text: #ededea;
+  --text-2: #c3c2b7;
+  --text-muted: #8f8d86;
+
+  /* accent */
+  --accent: #3987e5;
+  --accent-text: #5598e7;
+  --btn-primary: #256abf;
+  --on-accent: #ffffff;
+  --focus: #6aa6ee;
+
+  /*
+   * P&L ink (always paired with +/− signs). Same polarity as the charts' diverging
+   * poles (palette.ts divPos/divNeg): a gain is BLUE everywhere, a loss red. Green is
+   * reserved for status (--good*), so P&L never borrows the "running / filled" hue.
+   */
+  --pos: #5598e7;
+  --neg: #e66767;
+
+  /* status (reserved meaning; always with icon + label) */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  /* #2dbd2d: 5.9:1 on --good-bg, 5.4:1 on a hovered row (#0ca30c was 4.4 / 4.0). */
+  --good-text: #2dbd2d;
+  --warn-text: #fab219;
+  --serious-text: #ec835a;
+  --bad-text: #e66767;
+  --info-text: #5598e7;
+  --good-bg: rgba(12, 163, 12, 0.14);
+  --warn-bg: rgba(250, 178, 25, 0.13);
+  --serious-bg: rgba(236, 131, 90, 0.14);
+  --bad-bg: rgba(208, 59, 59, 0.17);
+  --info-bg: rgba(57, 135, 229, 0.15);
+  --neutral-bg: rgba(255, 255, 255, 0.07);
+
+  /* sides */
+  --yes-text: #5598e7;
+  --yes-bg: rgba(57, 135, 229, 0.15);
+  --no-text: #ec835a;
+  --no-bg: rgba(236, 131, 90, 0.14);
+
+  /* paper badge */
+  --paper-bg: #fab219;
+  --paper-text: #1a1206;
+
+  /*
+   * Venues (docs/COINBASE_CONTRACT.md §14): Kalshi = teal, Coinbase = violet. Deliberately
+   * away from P&L blue/red, status green/amber/orange and the accent blue. Always paired
+   * with a text label + monogram (components/Venue.tsx), never colour alone.
+   *   --venue-*       marks: borders, chart lines, nav indicator, monogram square
+   *                   (≥ 4.3:1 on every dark surface; the pair passes the dataviz
+   *                   validator: CVD ΔE 13.0, normal-vision ΔE 22.1)
+   *   --venue-*-bg    tint behind badges / banners / the active nav group
+   *   --venue-*-text  text on the tint or a surface (≥ 4.7:1 on tint over every surface)
+   *   --venue-*-on    monogram glyph on the --venue-* square (≥ 4.5:1: dark glyph, except
+   *                   white on the light-theme Coinbase violet, 5.6:1)
+   * Mirrored as hex in lib/venueColors.ts for recharts (SVG attributes cannot read var()).
+   */
+  --venue-kalshi: #19a6a1;
+  --venue-kalshi-bg: rgba(25, 166, 161, 0.15);
+  --venue-kalshi-text: #3cc9c3;
+  --venue-coinbase: #9a7cf2;
+  --venue-coinbase-bg: rgba(154, 124, 242, 0.16);
+  --venue-coinbase-text: #b39cf6;
+  --venue-kalshi-on: #0d0d0d;
+  --venue-coinbase-on: #0d0d0d;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f3f2ee;
+    --surface-1: #fcfcfb;
+    --surface-2: #f3f2ee;
+    --surface-3: #e9e8e2;
+    --border: rgba(11, 11, 11, 0.1);
+    --border-strong: #c3c2b7;
+    --row-hover: rgba(11, 11, 11, 0.03);
+    --shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --text-muted: #6b6a65;
+    --accent: #2a78d6;
+    --accent-text: #256abf;
+    --btn-primary: #256abf;
+    --focus: #2a78d6;
+    --pos: #256abf;
+    --neg: #c62f2f;
+    --good-text: #006300;
+    --warn-text: #8a5a00;
+    --serious-text: #a8501f;
+    --bad-text: #c62f2f;
+    --info-text: #256abf;
+    --good-bg: rgba(12, 163, 12, 0.12);
+    --warn-bg: rgba(250, 178, 25, 0.2);
+    --serious-bg: rgba(236, 131, 90, 0.16);
+    --bad-bg: rgba(208, 59, 59, 0.11);
+    --info-bg: rgba(42, 120, 214, 0.11);
+    --neutral-bg: rgba(11, 11, 11, 0.06);
+    --yes-text: #256abf;
+    --yes-bg: rgba(42, 120, 214, 0.11);
+    --no-text: #a8501f;
+    --no-bg: rgba(236, 131, 90, 0.16);
+    /* venues (light): text ≥ 4.5:1 on tint over every light surface; marks ≥ 3.1:1 */
+    --venue-kalshi: #00918b;
+    --venue-kalshi-bg: rgba(0, 145, 139, 0.12);
+    --venue-kalshi-text: #006b66;
+    --venue-coinbase: #6e4fd6;
+    --venue-coinbase-bg: rgba(110, 79, 214, 0.12);
+    --venue-coinbase-text: #5535be;
+    --venue-kalshi-on: #0d0d0d;
+    --venue-coinbase-on: #ffffff;
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f2ee;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --surface-3: #e9e8e2;
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: #c3c2b7;
+  --row-hover: rgba(11, 11, 11, 0.03);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-muted: #6b6a65;
+  --accent: #2a78d6;
+  --accent-text: #256abf;
+  --btn-primary: #256abf;
+  --focus: #2a78d6;
+  --pos: #256abf;
+  --neg: #c62f2f;
+  --good-text: #006300;
+  --warn-text: #8a5a00;
+  --serious-text: #a8501f;
+  --bad-text: #c62f2f;
+  --info-text: #256abf;
+  --good-bg: rgba(12, 163, 12, 0.12);
+  --warn-bg: rgba(250, 178, 25, 0.2);
+  --serious-bg: rgba(236, 131, 90, 0.16);
+  --bad-bg: rgba(208, 59, 59, 0.11);
+  --info-bg: rgba(42, 120, 214, 0.11);
+  --neutral-bg: rgba(11, 11, 11, 0.06);
+  --yes-text: #256abf;
+  --yes-bg: rgba(42, 120, 214, 0.11);
+  --no-text: #a8501f;
+  --no-bg: rgba(236, 131, 90, 0.16);
+  /* venues (light): text ≥ 4.5:1 on tint over every light surface; marks ≥ 3.1:1 */
+  --venue-kalshi: #00918b;
+  --venue-kalshi-bg: rgba(0, 145, 139, 0.12);
+  --venue-kalshi-text: #006b66;
+  --venue-coinbase: #6e4fd6;
+  --venue-coinbase-bg: rgba(110, 79, 214, 0.12);
+  --venue-coinbase-text: #5535be;
+  --venue-kalshi-on: #0d0d0d;
+  --venue-coinbase-on: #ffffff;
+}

@@ -1,0 +1,267 @@
+# kalshibot configuration — PAPER TRADING ONLY (no real orders, no API credentials).
+# Copied to config.yaml on first run. Any value can be overridden with an environment
+# variable KALSHIBOT_<SECTION>__<KEY>, e.g. KALSHIBOT_KALSHI__MAX_RPS=2.
+# Money values are dollars.
+
+kalshi:
+  # Public, unauthenticated market-data REST API.
+  base_url: https://api.elections.kalshi.com/trade-api/v2
+  # Client-side rate limit (requests/second). The unauthenticated limit is undocumented
+  # and shared per IP; 429s were seen at ~1.6 req/s while other clients were active.
+  # Keep this <= 3.
+  max_rps: 3
+  timeout: 15            # seconds per HTTP request
+
+account:
+  starting_balance: 1000 # paper cash at start / after reset
+
+engine:
+  autostart: true        # start the trading loop with `kalshibot serve`
+  universe_refresh_s: 120
+  tick_s: 30             # strategy on_tick interval
+  order_poll_s: 15       # resting (maker) order fill simulation + expiries
+  settlement_poll_s: 60  # poll held markets for determination/finalization
+  snapshot_s: 60         # equity snapshot interval
+  # Markets-page baseline: active markets closing within this many days are always in the
+  # universe, on top of what enabled strategies ask for (0 = strategies only). The full
+  # open universe is > 120k markets, so keep this window short: 0.5 days ~ 4k markets,
+  # ~33 pages, 20-30 s per full refresh at 2 req/s.
+  scanner_days_to_close: 0.5
+  # Page cap for one full scan of the window (1000 markets per page). The window is read nearest
+  # close first, so a cap drops the far end. The strategies' 3-day window was 116 pages (26k
+  # active markets) on 2026-09-27; a cap of 100 left markets 1.5-3 days out unread.
+  universe_max_pages: 150
+  universe_window_rescan_s: 900    # full re-scan of the window at least this often
+
+paper:
+  # Paper fills "use up" displayed depth: what we took stays unavailable while the level
+  # still shows it (others' trades/cancels shrink it, new contracts joining are fresh).
+  # After this many seconds since our last take, a level that has visibly been re-quoted
+  # larger counts as fresh again; an unchanged (stale) level never does.
+  consumed_liquidity_ttl_s: 300
+  default_gtc_expiry_s: 3600     # resting orders expire after this unless the strategy says otherwise
+  # Fee/balance rounding precision (docs.kalshi.com/getting_started/fee_rounding):
+  # 0.01 = non-direct member (conservative; matches the published fee tables),
+  # 0.0001 = direct member (sensitivity check).
+  fee_precision: 0.01
+  # Simulated order latency: an order reaches the paper exchange this many seconds after the
+  # strategy decided, and walks only an order book received from then on - never the book the
+  # decision was made on (no stale-quote pick-offs a real REST order could not get).
+  taker_latency_s: 0.25
+  # Trade-tape reads per resting-order pass (one request each; 0 = no cap). Markets with orders
+  # about to expire go first, then the least recently read; skipped markets lose no trades.
+  max_trade_polls_per_pass: 8
+
+risk:
+  # Dollar limits must be >= 0 (0 disables daily_loss_limit; max_spread is in [0, 1]).
+  # Basket legs count against these limits together; exits are net of resting exit orders.
+  max_position_cost_per_market: 50   # $ cost basis per market
+  max_exposure_per_event: 100        # $ across all markets of one event
+  max_total_exposure_pct: 60         # % of equity deployed (backstop over the per-strategy caps)
+  max_strategy_allocation_pct: 50    # % of equity per strategy, for strategies without their own cap
+  min_cash_reserve: 50               # $ never spent
+  max_orders_per_minute: 30          # per strategy: one strategy's burst never blocks another's order
+  daily_loss_limit: 150              # $; account-wide hard stop: trips the kill switch (no new entries)
+  kill_switch_auto_release: true     # release a daily-loss trip at the next UTC day (manual trips stay on)
+  min_seconds_to_close: 300          # no entries this close to close_time
+  max_spread: 0.10                   # skip markets with a wider YES spread
+  kelly_fraction: 0.25               # fraction of full Kelly used by kelly_count()
+
+# Per-strategy settings: {<name>: {enabled: bool, params: {...}, max_allocation_pct: %,
+#                                  daily_loss_limit: $}}. Names are the keys of
+# kalshibot.strategies.REGISTRY; params left out use the strategy's defaults (the Strategies page
+# lists every parameter with its help text).
+#
+# Which strategies run (first one set wins):
+#   1. the dashboard's Strategies toggle (saved in the database; survives restarts),
+#   2. `enabled:` here (or KALSHIBOT_STRATEGIES__<NAME>__ENABLED=true|false),
+#   3. the strategy's built-in default: the four research strategies below are ON by default,
+#      so a config.yaml written before they existed (`strategies: {}`) runs all four after a
+#      restart. Set `enabled: false` (or flip the switch) to turn one off.
+#
+# Risk: max_allocation_pct caps the strategy's exposure (% of equity); daily_loss_limit pauses only
+# that strategy's entries until the next UTC day (0 = off). Unset, the built-in values shown below
+# apply - 45% of equity in all, so the experimental strategies can never crowd out the primary one.
+# On a $1,000 paper account that is at most $100 / $150 / $100 / $100 of exposure.
+#
+# Evidence (research/FINDINGS.md): only btc15m_favorite held up on data it was not tuned on. Paper
+# profits are not guaranteed, and the experimental strategies are forward paper-tests.
+strategies:
+  # PRIMARY. KXBTC15M: 10 min before each 15-minute window closes, buy the side priced 0.85-0.97
+  # when a Coinbase spot model says it wins >= 1c/contract more often than ask + fee; hold.
+  # In-sample +3.7c/contract (n=555), untouched holdout +4.9c (n=203). Timing-sensitive: keep the
+  # entry window (decides within 15 s of the 10:00 mark, ticks every 5 s).
+  btc15m_favorite:
+    enabled: true
+    # max_allocation_pct: 10          # $100 of a $1,000 account: one or two windows at a time
+    # daily_loss_limit: 100
+    params: {}
+    #   sizing: kelly                 # kelly (0.25 x Kelly on the model probability) | fixed
+    #   max_cost_per_trade: 50        # $ per trade including the fee
+    #   min_contracts: 10             # smaller orders lose to per-order fee rounding
+    #   price_min: 0.85               # favourite ask band, inclusive
+    #   price_max: 0.97
+    #   min_model_edge: 0.01          # model P(side) - ask - fee per contract
+    #   use_model: true               # false = blind favourite (weaker)
+
+  # EXPERIMENTAL (failed its independent May-Jul holdout: -0.9c/contract). Small forward test:
+  # at each UTC hour, buy YES at the ask on Commodities/Financials/Crypto/Economics ladder markets
+  # with YES bid >= 0.97 within 72 h of expiry; hold. Many small wins, rare large losses.
+  ladder_favorite:
+    enabled: true
+    # max_allocation_pct: 15
+    # daily_loss_limit: 45
+    params: {}
+    #   max_position_cost: 10         # $ per market (about 10 contracts)
+    #   max_event_cost: 20            # $ per event (losses cluster within a ladder)
+    #   max_group_cost: 40            # $ per underlying (all gas series, WTI + Brent, gold, ...)
+    #   max_total_cost: 150           # $ in all
+    #   min_yes_bid: 0.97
+
+  # EXPERIMENTAL (literature only; the repo's own candle model is negative in this band; not
+  # backtestable). Rests small GTC bids at the best bid of the 0.85-0.96 favourite in maker-fee-free
+  # markets closing in 6 h - 3 d (no Sports/Crypto/Mentions); re-quotes/cancels; holds fills.
+  maker_favorite:
+    enabled: true
+    # max_allocation_pct: 10
+    # daily_loss_limit: 30
+    params: {}
+    #   order_dollars: 10             # $ per resting bid
+    #   max_resting_orders: 8         # each costs trade-tape polling (API budget)
+    #   max_open_cost: 100            # $ positions + resting bids
+    #   exclude_categories: [Sports, Crypto, Mentions]
+
+  # Locks in a profit when it fires, which is almost never (0 of 4,986 events at REST speed): buys
+  # one NO on every leg of a mutually-exclusive event when the basket pays >= 1c/unit after fees, all
+  # or none. Not riskless: a voided event settles at Kalshi's "fair prices".
+  no_basket_arb:
+    enabled: true
+    # max_allocation_pct: 10
+    # daily_loss_limit: 0             # hedged baskets: no daily pause
+    params: {}
+    #   max_days_to_close: 3          # wider windows make every universe scan much more expensive
+    #   min_profit_per_basket: 0.01   # guaranteed $ per unit basket after fees and rounding
+    #   max_basket_cost: 90           # keep below risk.max_exposure_per_event
+    #   max_leg_cost: 45              # keep below risk.max_position_cost_per_market
+
+analytics:
+  # Go-live readiness verdict (GET /api/analytics), per strategy: ready only with at least this
+  # many settled trades, a 95% CI lower bound of mean P&L per trade > 0, a loss-event rate whose
+  # 95% upper bound is below break-even (tail check: a bootstrap cannot see a loss it has not
+  # seen), and a max drawdown within max_drawdown_pct (% of the running peak of the account's
+  # starting balance plus the strategy's P&L; the drawdown against the strategy's allocation is
+  # shown too, but a $50 bet on a $100 allocation would fail it on any losing streak). The
+  # headline is ready only when at least one strategy is.
+  min_settled_trades: 200
+  min_settled_trades_by_strategy:    # rare-loss strategies need far more evidence (a 1c edge: 1,200-3,600 bets)
+    btc15m_favorite: 300
+    ladder_favorite: 1500
+    maker_favorite: 1000
+    no_basket_arb: 200
+  max_drawdown_pct: 20
+
+# External data used by strategies (ctx.feeds). Optional; the built-in defaults are:
+# feeds:
+#   crypto:                         # Coinbase/Kraken public spot + 1-minute candles (btc15m_favorite)
+#     symbols: [BTC, ETH]
+#     ttl_s: 5                      # spot quote cache (seconds)
+#     candle_ttl_s: 30              # 1-minute candle cache (seconds)
+#     sources: [coinbase, kraken]   # tried in order (btc15m_favorite only trusts coinbase)
+#   kalshi_settled:                 # recently settled markets of a series (btc15m_favorite's basis);
+#     ttl_s: 60                     # shares the engine's Kalshi client, so it counts toward kalshi.max_rps
+
+# Backtests (`kalshibot backtest`, the dashboard's Backtests page) replay research/ data through the
+# same strategy classes (docs/ARCHITECTURE.md section 10). Optional defaults; CLI flags and the
+# dashboard's request win:
+# backtest:
+#   fill: auto          # same | next | next_ask | auto (research convention per dataset)
+#   latency_s: 60       # delay for fill=next / next_ask
+#   book_size: 250      # contracts per synthetic book level (candles carry no depth)
+#   risk: true          # live risk limits, including each strategy's own caps
+
+server:
+  host: 127.0.0.1
+  port: 8765
+
+storage:
+  # SQLite file of the paper account. A relative path is relative to THIS file's directory.
+  # One process owns it at a time (lock file <path>.lock): `kalshibot reset` refuses while
+  # `kalshibot serve` runs - reset from the dashboard (POST /api/account/reset) instead.
+  path: data/kalshibot.sqlite3
+
+# Coinbase spot crypto - a SECOND, fully separate PAPER venue (docs/COINBASE_CONTRACT.md).
+# Own $ paper account, SQLite file, engine, kill switch and risk limits; public market data only
+# (never real orders, never API keys). Everything below is the built-in default, so this section
+# may stay commented out; uncomment and edit to change it. An invalid coinbase section disables
+# only the Coinbase venue (the reason is shown in the dashboard) - Kalshi keeps running.
+# Env overrides: KALSHIBOT_COINBASE__<KEY>, e.g. KALSHIBOT_COINBASE__ENABLED=false.
+# coinbase:
+#   enabled: true
+#   base_url: https://api.exchange.coinbase.com   # Coinbase Exchange public REST (no auth)
+#   max_rps: 3              # public limit: 10 req/s per IP (burst 15), shared by everything on this host
+#   timeout: 10             # seconds per HTTP request
+#   starting_balance: 1000  # Coinbase paper USD cash at start / after reset (separate from Kalshi's)
+#   # Fee tier (kalshibot/coinbase/fees.py, docs/coinbase_api_notes.md §3). Fees are charged in USD on
+#   # every fill and rounded up to the cent. intro = Coinbase Advanced "Intro" tier for US accounts,
+#   # 0.50% maker / 0.90% taker since 2026-09-16 (a taker round trip costs 1.80%); intro_eu
+#   # (0.25/0.50), intro_intl (0.09/0.10), intro_pre_2026_09 (0.60/1.20, a pessimistic check),
+#   # vip_8 (0.00/0.02). Higher-tier rates are shown only on your signed-in Coinbase fee page: put
+#   # them in fee_rates, which win over fee_tier.
+#   fee_tier: intro
+#   # fee_rates: {maker: 0.005, taker: 0.009}
+#   storage_path: data/coinbase.sqlite3   # relative to THIS file's directory, like storage.path
+#   paper:
+#     max_slippage_bps: 100          # market orders stop walking the book this far past the best price
+#     consumed_liquidity_ttl_s: 300  # displayed depth we took stays used up this long
+#     default_gtc_expiry_s: 3600     # resting orders expire after this unless the strategy says otherwise
+#     fill_on_book_cross: false      # true: a book crossing a resting order's limit fills it with no print
+#   engine:
+#     autostart: true
+#     bar_delay_s: 60          # run strategies this long after each bar closes
+#     maintenance_s: 15        # resting-order fills (from public trades) + expiries
+#     snapshot_s: 60           # marks + equity snapshot
+#     products_refresh_s: 3600
+#     maker_timeout_s: 120     # maker_then_taker: rest post-only this long, then take the rest
+#   risk:
+#     max_position_pct_per_product: 50  # % of Coinbase equity in one product
+#     max_total_exposure_pct: 90        # % of Coinbase equity invested
+#     max_strategy_allocation_pct: 50   # % per strategy without its own max_allocation_pct
+#     min_cash_reserve: 20              # $ never spent
+#     max_orders_per_minute: 20
+#     daily_loss_limit: 100             # $; trips the Coinbase kill switch (blocks buys; sells allowed)
+#     max_spread_bps: 50                # skip products with a wider bid/ask spread
+#     min_trade_usd: 10                 # skip smaller rebalance trades
+#   # Per-strategy settings: {<name>: {enabled: bool, params: {...}, max_allocation_pct: %}}
+#   # (names: kalshibot.coinbase.strategies.REGISTRY). Which run: the dashboard toggle, else
+#   # `enabled:` here, else the built-in default - all three below are ON by default, so a
+#   # config.yaml with no coinbase section (or `strategies: {}`) runs them; set `enabled: false`
+#   # (or flip the switch) to turn one off. max_allocation_pct = the strategy's slice, % of
+#   # Coinbase equity. Both BTC strategies share max_position_pct_per_product (50%): keep
+#   # btc_trend + btc_hold well under it, or btc_trend's entries get sized down once btc_hold's
+#   # BTC has gained. An allocation change applies at a strategy's next entry (btc_trend and
+#   # btc_hold never resize a held position). Evidence (research/coinbase/FINDINGS.md): nothing
+#   # beat simply holding BTC after retail fees; these are forward paper-tests.
+#   strategies: {}   # {} = the built-in values below; to change one, list it here, e.g.
+#   #   # PRIMARY. Risk overlay, not an edge: 100% BTC above 1.02xSMA100, cash below 0.98xSMA100
+#   #   # (research 29.1 vs 28.6%/yr for holding BTC, half the drawdown). Timing-sensitive: decides
+#   #   # at the 00:00 UTC daily close; acting a day late cost ~7 pts/yr.
+#   #   btc_trend:
+#   #     enabled: true
+#   #     max_allocation_pct: 25        # $250 of a $1,000 account
+#   #     params: {}
+#   #     #   sma_n: 100                # researched; neighbours tested mostly worse
+#   #     #   buffer: 0.02
+#   #     #   execution: taker          # taker | maker_then_taker (maker fills untested)
+#   #   # BENCHMARK. Buys BTC once and holds it: the bar the others have to beat.
+#   #   btc_hold:
+#   #     enabled: true
+#   #     max_allocation_pct: 15
+#   #   # EXPERIMENTAL. ETH above its 200-day SMA, sized to 50% annualized volatility; cash below.
+#   #   # Beat holding ETH but trailed holding BTC by ~8-10 pts/yr in research.
+#   #   eth_trend_vt:
+#   #     enabled: true
+#   #     max_allocation_pct: 25
+#   #     params: {}
+#   #     #   sma_n: 200
+#   #     #   target_vol: 0.50
+#   #     #   vol_window: 30

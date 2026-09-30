@@ -1,0 +1,34 @@
+# runtime state / local config
+data/
+config.yaml
+
+# python
+.venv/
+**/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# frontend
+node_modules/
+frontend/dist/
+.env
+
+# research: generated/cached data, logs, and scratch output (keep source .py/.md)
+research/**/raw/
+research/**/cache/
+research/**/results/
+research/**/logs/
+research/**/verify_*/
+research/**/superseded/
+research/**/*.parquet
+research/**/*.csv
+research/**/*.csv.gz
+research/**/*.json.gz
+research/**/*.jsonl.gz
+research/**/*.log
+research/**/logs_*.txt
+research/**/*.out
+research/**/*.stdout
+research/**/*.err

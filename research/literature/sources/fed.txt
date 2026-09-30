@@ -1,0 +1,1998 @@
+                         Finance and Economics Discussion Series
+
+                                Federal Reserve Board, Washington, D.C.
+                                         ISSN 1936-2854 (Print)
+                                        ISSN 2767-3898 (Online)
+
+
+
+
+                      Kalshi and the Rise of Macro Markets
+
+
+
+
+         Anthony M. Diercks, Jared Dean Katz, and Jonathan H. Wright
+
+
+                                              2026-010
+
+
+
+
+       Please cite this paper as:
+       Diercks, Anthony M., Jared Dean Katz, and Jonathan H. Wright (2026). “Kalshi
+       and the Rise of Macro Markets,” Finance and Economics Discussion Series
+       2026-010.      Washington:  Board of Governors of the Federal Reserve System,
+       https://doi.org/10.17016/FEDS.2026.010.
+
+
+
+   NOTE: Staff working papers in the Finance and Economics Discussion Series (FEDS) are preliminary
+materials circulated to stimulate discussion and critical comment. The analysis and conclusions set forth
+are those of the authors and do not indicate concurrence by other members of the research staff or the
+Board of Governors. References in publications to the Finance and Economics Discussion Series (other than
+acknowledgement) should be cleared with the author(s) to protect the tentative character of these papers.
+                 Kalshi and the Rise of Macro Markets
+                  Anthony M. Diercks∗                         Jared Dean Katz †
+                Federal Reserve Board                    Northwestern University
+
+                                       Jonathan H. Wright ‡
+       Johns Hopkins University and National Bureau of Economic Research
+
+                                         February 12, 2026
+
+
+
+                                                Abstract
+
+        Prediction markets offer a new market-based approach to measuring macroeconomic
+        expectations in real-time. We evaluate the accuracy of prediction market-implied fore-
+        casts from Kalshi, the largest federally regulated prediction market overseen by the
+        CFTC. We compare Kalshi with more traditional survey and market-implied fore-
+        casts, examine how expectations respond to macroeconomic and financial news, and
+        how policy signals are interpreted by market participants. Our results suggest that
+        Kalshi markets provide a high-frequency, continuously updated, distributionally rich
+        benchmark that is valuable to both researchers and policymakers.
+
+
+JEL Codes: E3, G1, C5.
+Keywords: Kalshi, Federal Reserve, prediction markets, expectations, forecasting
+
+
+
+
+   ∗
+     The views expressed are those of the authors and do not necessarily reflect those of the Federal Reserve
+System. We thank Eric Engstrom, Michael Palumbo and members of the Monetary and Financial Market
+Analysis section in the Division of Monetary Affairs for helpful comments and suggestions. All errors
+and omissions are the sole responsibility of the authors. Diercks is the corresponding author. Website:
+www.anthonydiercks.com. Email: anthony.m.diercks@frb.gov.
+   †
+     Email: jared.katz@kellogg.northwestern.edu.
+   ‡
+     Email: wrightj@jhu.edu.
+
+
+                                                     1
+1    Introduction
+Managing expectations is central to modern macroeconomic policy. Yet the tools that are
+often relied upon—surveys and financial derivatives—have many drawbacks. Surveys can
+quickly become stale and ask specific questions that often provide point forecasts without
+any measure of uncertainty. Financial derivatives are also limited to certain contracts and
+trading may be thin. This paper introduces a new source of real-time, financially-backed
+expectations data: Kalshi macroeconomic prediction markets. Kalshi is the first federally
+regulated platform where traders bet directly on economic outcomes such as inflation, pay-
+rolls, and Federal Reserve decisions. Using high-frequency trading data, we show that these
+markets yield well-calibrated, rapidly updating density forecasts on important economic vari-
+ables, including several for which alternatives are not available. Our study highlights the
+promise of prediction markets as a new benchmark for measuring expectations and informing
+monetary policy decisions.
+    Despite a large literature using surveys, options, and asset prices to infer macroeconomic
+expectations (e.g., Gürkaynak, Sack and Swanson (2012), Nakamura and Steinsson (2018),
+Swanson (2021)), real-money prediction markets remain underexplored within macro-finance.
+This reflects the shortcomings of earlier platforms, which were often thin, unregulated, or
+focused on non-economic outcomes. The availability of credible, liquid markets for macro
+variables now enables a direct, incentive-compatible lens on expectations—one that avoids
+many of the limitations of existing proxies. Our analysis is one of the first to systematically
+examine this new data source.
+    Kalshi, the largest CFTC-approved prediction market in the United States, began operat-
+ing in 2021. Classified as a “Designated Contract Market”—the same category as the Chicago
+Mercantile Exchange—it is supported by market makers such as Susquehanna. Kalshi con-
+tracts are also accessible to retail traders through brokerage platforms like Robinhood and
+Webull. Each contract is a simple Arrow-Debreu security that pays one dollar if the specified
+outcome occurs; therefore, the full risk-neutral probability density function (pdf) of an event
+can be constructed by the set of contracts in the given market. Kalshi provides intradaily
+trade data for different measures of CPI (MoM, YoY, or calendar year), Core CPI, PCE
+inflation, unemployment rate, payroll releases, GDP growth, probability of recession, and
+federal funds rate target rates meeting-by-meeting. Several of these are variables for which
+there were no previous financial derivatives trading.
+    We begin by showing that the probability distributions implied by Kalshi markets are
+well-behaved and broadly consistent with those from more established financial instruments.
+We find that in several episodes, they allocate probability mass in ways that may reflect the
+
+
+                                              2
+range of plausible macroeconomic outcomes better than traditional financial derivative or
+survey-based forecasts.
+    Second, we document rich intraday dynamics in Kalshi markets. These probabilities
+respond sharply and sensibly to major developments. For example, the implied probability
+of a rate cut at the July 2025 FOMC rose to 25% following remarks from Governors Waller
+and Bowman, before falling after a stronger-than-expected June employment report. This
+pattern is representative of the broader high-frequency responsiveness we observe and is
+missed with daily data.
+    Third, we evaluate the forecasting performance of Kalshi markets relative to the Survey of
+Market Expectations run by the Federal Reserve Bank of New York (FRBNY). For the federal
+funds rate forecasts 150 days (3 FOMC meetings) ahead, Kalshi’s mean absolute error is very
+similar to that of professional forecasters. But unlike the survey—which provides a snapshot
+every six weeks of a modal path—Kalshi offers a continuously updating full distribution. We
+provide a preview of these results in Figure 1. This figure shows the mean absolute prediction
+error, averaging across all FOMC meetings, plotted against the number of days before the
+FOMC meeting. We find the Kalshi median and mode have a perfect forecast record on the
+day before the FOMC meeting, which represents a statistically significant improvement over
+the fed funds futures forecast.
+    We also assess CPI and unemployment forecasts relative to the Bloomberg consensus.
+We find that Kalshi expectations are statistically similar for core CPI and unemployment,
+with forecast errors that are almost the same as the Bloomberg consensus. In contrast,
+for headline CPI, we find Kalshi provides a statistically significant improvement over the
+Bloomberg consensus forecast.
+    Fourth, we demonstrate that Kalshi provides real-time, distributional forecasts for macroe-
+conomic variables such as GDP, core CPI, and unemployment—markets for which options
+data have historically been unavailable. While option-implied distributions exist for equities,
+interest rates, and CPI headline inflation swaps, Kalshi uniquely extends this to other head-
+line macro indicators at high frequency while providing a more retail-investor perspective.
+Moreover, there are no currently trading options that give distributions of the federal funds
+rate after specific FOMC meetings, another hole that Kalshi fills.
+    Fifth, with access to full distributions, we uncover new patterns in how macroeconomic
+news affects the moments of the Federal Funds rate distribution. We study how different
+kinds of news announcements affect the mean, variance and skewness of interest rate beliefs.
+We find that, during the 2022-2025 period, the variance of interest rate distributions declines
+substantially following data announcements, especially inflation releases. We split out the
+announcements of CPI inflation into ones which were positive surprises, negative surprises
+
+
+                                              3
+          Figure 1: FOMC Federal Funds Rate Forecast Errors Comparison
+This figure compares the mean absolute errors from 160 days out to each FOMC for the effective federal
+funds rate since 2022. The vertical bars reflect one-half standard deviation for the forecast errors for the
+Survey of Market Expectations and correspond to when the surveys were completed.
+
+
+and zero surprises. We find that the variance of interest rates declines the most following a
+zero surprise inflation release, but also falls—though to a lesser extent—after both positive
+and negative surprises, consistent with a general resolution of uncertainty. Furthermore, we
+uncover an asymmetry with respect to the first moment, where positive shocks to CPI lead
+to much larger responses in the mean of the fed funds rate when compared to negative CPI
+shocks. We also examine the effects of macro surprises on the moments of the Federal Funds
+rate in a standard event-study regression and find many of these moves are statistically
+significant.
+    Lastly, we conduct event study regressions for the effects of monetary policy shocks on
+the distribution of the Federal Funds rate. We find that shocks associated with the release
+of the FOMC statement have statistically significant impacts on not just the first moment,
+but also tend to increase the second moment. In contrast, shocks associated with the press
+conference have limited effect on the first moment but a significant and negative effect on
+skewness, implying some potential resolution of upside uncertainty to interest rates during
+this window.
+    We intend (subject to approval) to make the distributional daily-level data publicly avail-
+able via an interactive website at EconFutures.com, offering downloadable time series and
+visualizations for each contract, as well as trade-level data and code to further update predic-
+tion market data available on this paper’s GitHub. Our goal is to facilitate further research
+and enable policymakers to easily monitor shifts in investors’ beliefs in real-time.
+
+
+                                                     4
+    Our paper touches upon several strands of the macro-finance literature. A large body of
+work extracts interest rate beliefs from options prices. Seminal contributions include Aı̈t-
+Sahalia (1996), who develops nonparametric pricing methods, and Ball and Torous (1999),
+who highlight the role of stochastic volatility. Subsequent research emphasizes unspanned
+volatility (Fan, Gupta and Ritchken, 2003; Li and Zhao, 2006) and the pricing implications
+of volatility smiles (Jarrow, Li and Zhao, 2007; Amin and Ng, 1997). Other studies examine
+the structure of state price densities (Bakshi and Madan, 2000; Li and Zhao, 2009) and
+the pricing of caps and swaptions (Longstaff, Santa-Clara and Schwartz, 2001; Miltersen,
+Sandmann and Sondermann, 1997), while more recent work by Mertens and Williams (2021)
+uses option prices to derive expectations related to the zero lower bound and Wright (2018)
+evaluates options for longer-maturity real interest rates. Although informative, many of
+these approaches rely on complex structural models that infer expectations from instruments
+indirectly related to the policy rate. In contrast, we use prediction market data explicitly
+tied to the federal funds rate and other macroeconomic variables, enabling the recovery of
+risk-neutral probabilities with minimal assumptions at high frequency.
+    Our work is also closely related to studies of monetary policy expectations, uncertainty,
+and skewness. Gürkaynak, Sack and Swanson (2012) construct measures of market-based
+policy expectations, while Beber and Brandt (2006) show that macroeconomic news affects
+both beliefs and preferences as reflected in options markets. More recent work explores the
+role of monetary policy uncertainty (Bauer, Lakdawala and Mueller, 2022; Wright, forthcom-
+ing) and the pricing of asymmetric policy responses—often labeled the “Fed put” (Cieslak
+and Vissing-Jorgensen, 2021). Our analysis contributes to this literature by introducing
+a high-frequency, event-level measure of policy expectations distributions from prediction
+markets. We show that macroeconomic news significantly shifts not only the mean but also
+higher moments of the federal funds rate distribution in asymmetric ways. Asymmetries in
+interest rate distributions have also been explored for longer-dated yields as in Bauer and
+Chernov (2024), while Diercks, Tanaka and Cordova (2024) focus on skewness in expectations
+of interest rates coming from the FRBNY’s Survey of Primary Dealers.
+    A related literature examines beliefs about inflation extracted from options markets.
+Kitsul and Wright (2013) provide an early and influential analysis of risk-neutral inflation
+density functions, measuring risk of high inflation and deflation, and documenting meaningful
+variation in higher moments around key macroeconomic events. Fleckenstein, Longstaff and
+Lustig (2017) use inflation options to quantify market-implied deflation risk, while Hilscher,
+Raviv and Reis (2022) and Hilscher, Raviv and Reis (2024) explore how the pricing of extreme
+inflation outcomes informs debates on debt sustainability and macroeconomic fragility. Rich
+and Tracy (2010) compare market-based and survey-based measures, highlighting differences
+
+
+                                              5
+in expectations, disagreement, and uncertainty. Our analysis contributes to this literature
+by introducing a new source of market-based inflation expectations—derived from prediction
+markets—which provides direct, high-frequency measures beliefs about upcoming releases of
+both headline and core inflation. Whereas the existing inflation swaps and options reference
+headline inflation over periods of a year or more, Kalshi is different in giving information
+about upcoming data announcements, and also including information about core inflation.
+    Also related to our work is a growing literature that highlights the informational value
+of retail investor behavior. While early research often emphasized behavioral biases, recent
+studies show that retail trading can enhance market efficiency. Farrell, Green, Jame and
+Markov (2022) find that the rise of retail trading has increased the informativeness of prices,
+particularly around earnings announcements. Boehmer, Jones, Zhang and Zhang (2020)
+show that retail order flow predicts returns, and Kelley and Tetlock (2013) find that aggre-
+gated retail trades reflect valuable firm-level information. Kelley and Tetlock (2017) further
+show that retail short-selling contains predictive content for future stock price movements.
+Chen, De, Hu and Hwang (2014) also demonstrates that retail opinions shared via social
+media platforms contribute meaningfully to price discovery. Our use of prediction market
+data offers a new lens on retail investor expectations, capturing their beliefs directly and in
+real time, independent of the portfolio constraints and hedging motives that can often shape
+the positions of institutional investors, potentially generating sizeable risk premiums.
+    More broadly, we contribute to the forecasting literature that assesses the informativeness
+of financial market instruments and surveys, along with their distributions (Ang, Bekaert
+and Wei, 2007; Bakshi, Panayotov and Skoulakis, 2011; Christoffersen, Jacobs and Chang,
+2013; Clements, 2018; Goff, Kostka and Masera, 2014; Duffee, 2012; Wright and Faust, 2012).
+We show that prediction market forecasts are an improvement over fed funds futures and
+perform as well as those from the Survey of Market Expectations (SME) conducted by the
+FRBNY. We also show that prediction market-based inflation forecasts have been roughly
+comparable to the Bloomberg consensus, while updating more frequently.
+    Lastly, and most importantly, our work builds on a substantial literature examining pre-
+diction markets and economic forecasting. Snowberg, Wolfers and Zitzewitz (2013) and
+Wolfers and Zitzewitz (2004) provide comprehensive reviews of prediction markets in this
+context. The study closest to ours is Gürkaynak and Wolfers (2005), which analyzed the now-
+defunct Economics Derivatives market developed by Goldman Sachs and Deutsche Bank.
+Hanson and Oprea (2009) shows that even in the presence of manipulation, prediction mar-
+kets can yield reliable forecasts, and Snowberg and Wolfers (2010) examine behavioral biases
+that may affect pricing. Our contribution builds on this literature by applying prediction
+markets to the study of monetary policy, inflation, and other macro expectations using newly
+
+
+                                              6
+available contracts with high-frequency, event-level granularity.
+    We also acknowledge several concurrent studies that complement our findings. Swanson,
+Wang and Wu (2025) use Kalshi data to evaluate the Fed information effect, confirming
+that monetary policy shocks reduce expectations for both growth and inflation. Burgi, Deng
+and Whelan (2025) examine the full range of Kalshi markets and find them to be valuable
+forecasters for nearly all events, many of which are unrelated to economic variables. Eichen-
+green, Viswanath-Natraj, Wang and Wang (2025) use Polymarket data to explore questions
+surrounding Fed independence. We complement these contributions by focusing on exten-
+sively validating Kalshi as a forecasting tool and as a source of market-based expectations
+for key macroeconomic variables that are at the core of the Federal Reserve’s mission, while
+also documenting real-time stagflationary risks and asymmetric responses of fed funds rate
+distributions to news surprises. In addition, we provide codes and a transparent process for
+constructing probability distributions from underlying prediction market trades, facilitating
+future use by both researchers and policymakers.
+    Our paper is structured as follows. Section 2 reviews institutional details of prediction
+markets. Section 3 documents how we convert Kalshi options prices to probability distri-
+butions. Sections 4 and 5 compare the Kalshi point and density forecasts with alternatives
+around specific episodes. Section 6 gives a comparison of forecasts by average absolute error.
+Section 7 examines how Kalshi predictions respond to news announcements, and section 8
+concludes.
+
+
+2     Institutional Features and Design of Kalshi Markets
+2.1    Overview
+Prediction markets are financial platforms where users can trade contracts that pay out based
+on the outcome of real-world events, such as elections, sporting events, or macroeconomic
+releases. These contracts function similarly to options. A trader can buy or sell an option
+for a price x that pays off $1 if a given outcome occurs and nothing otherwise. The exchange
+naturally takes no position, and so every option has to have a buyer and a seller.
+    Kalshi, the largest CFTC-approved prediction market, defines a market as a single binary
+contract (e.g., ”CPI exceeds 2.5% YoY in March 2025”), and a series as a group of related
+markets (e.g., CPI exceeding various thresholds across different months). Kalshi has gained
+significant traction, with market making provided by firms such as Susquehanna. Retail
+investors can access Kalshi contracts via platforms like Robinhood and Webull. This growing
+infrastructure makes prediction markets a viable and valuable subject for economic study.
+
+
+                                              7
+Competing Platforms. Other platforms offering prediction markets include Polymarket,
+PredictIt, and Interactive Brokers. Of these, only Kalshi and Interactive Brokers operate
+under regulatory approval. Polymarket operates in a legal gray area and, along with PredictIt
+and Interactive Brokers, supports fewer contracts, lower liquidity, and smaller individual
+position limits. Kalshi’s maximum exposure per market currently reaches $7 million.
+   Given these distinctions, we argue that Kalshi represents the most mature and compre-
+hensive prediction market for economic forecasting. Accordingly, we rely on Kalshi data for
+the remainder of this paper.
+
+Forecast Markets on Macroeconomic and Monetary Policy Events. We identify a
+promising new class of prediction markets focused specifically on macroeconomic indicators
+and monetary policy outcomes. Table 1 lists several key Kalshi series in this space, includ-
+ing CPI, payroll releases, and FOMC decisions—events that typically attract substantial
+attention from financial markets.
+
+          Series                           First Contract   Frequency     Theme
+          CPI MoM                          June 2021        Monthly       Inflation
+          CPI YoY                          November 2022    Monthly       Inflation
+          CPI for Year                     2022             Annual        Inflation
+          Core CPI MoM                     June 2022        Monthly       Inflation
+          Core CPI YoY                     December 2022    Monthly       Inflation
+          Core CPI for Year                2025             Annual        Inflation
+          Unemployment Rate                July 2021        Monthly       Labor Market
+          Payroll Release                  March 2023       Monthly       Labor Market
+          GDP Growth                       Q2 2021          Quarterly     Growth
+          GDP Growth                       2025             Annually      Growth
+          Probability of US Recession      2022             Annually      Growth
+          Federal Funds Rate Decision      May 2023         FOMC          Monetary Policy
+          Federal Funds Rate Target Rate   December 2021    FOMC          Monetary Policy
+
+                            Table 1: Kalshi Markets of Interest
+There are thousands of Kalshi markets available, but we deem these particular markets to be the most
+economically relevant.
+
+
+    Prior literature has shown that surprises in these events can significantly move asset
+prices, elevate market volatility, and contribute to macroeconomic uncertainty. Since central
+bank decisions depend heavily on incoming data and market expectations, accurate, real-time
+forecasting of these variables is vital for effective policy implementation.
+
+Why High-Frequency Forecasts Matter. Prediction markets offer high-frequency, con-
+tinuously updating forecasts that can complement central bank decision-making. High-
+frequency data let us apply an event study methodology to see how news shapes beliefs
+
+                                                 8
+about macroeconomic indicators. For macroeconomic indicators like CPI and unemploy-
+ment—two pillars of the Federal Reserve’s dual mandate—market-based forecasts improve
+the Fed’s ability to communicate policy direction and assess the market’s perceived reaction
+function under various scenarios.
+    For monetary policy itself, such as upcoming FOMC decisions, prediction markets offer
+a valuable check on the effectiveness of Fed communication. Importantly, these markets
+can also reflect the entire distribution of expectations, helping policymakers understand tail
+risks, asymmetries, and market uncertainty—information that is lost when only modal or
+median expectations are provided.
+
+
+2.2     Traditional Forecasting Approaches
+Table 2 summarizes commonly used forecasting tools for the economic indicators listed in
+Table 1. These tools fall into two categories: surveys and market-based measures.
+
+2.2.1   Survey-Based Forecasts
+
+Surveys offer forecasts without requiring complex models or assumptions and are not subject
+to risk premia since respondents do not face financial consequences for their predictions.
+Notable surveys include:
+
+   • Survey of Market Expectations (SME) by the Federal Reserve Bank of New York
+     (formerly SPD/SMP), which elicits expectations for upcoming FOMC decisions and
+     some year-end macroeconomic variables.
+
+   • Bloomberg Consensus, which collects modal expectations for macroeconomic an-
+     nouncements shortly before they are released.
+
+   • Blue Chip Economic Indicators, which gather monthly modal expectations for
+     year-end GDP and CPI.
+
+While surveys have been considered rather accurate on average (Ang, Bekaert and Wei,
+2007), they are generally infrequently available and may not reflect updates in real-time.
+Also, numerous studies have rejected the full information rational expectations hypothesis
+in survey expectations. Anchoring, inertia, and reputational concerns can distort survey
+results (see Diercks and Jendoubi (2023) for further discussion).
+
+
+
+
+                                              9
+ Source                    Variables              Horizon            Frequency       Type         Format
+ Bloomberg Consensus       CPI/Payrolls/GDP       Next release       Once-per-       Survey       Point-
+    Survey                 releases                                  event                        estimates
+                           & Fed decisions
+
+ Survey of Market          Fed decisions &        2 FOMC             Once-per        Survey       Distribution
+   Expectations PDFs       EoY CPI, GDP           Meetings           FOMC cycle
+
+ Survey of Market          Fed decisions          6 FOMC             Once-per        Survey       Point-
+   Expectations Paths                             Meetings           FOMC cycle                   estimates
+
+ Blue Chip Economic        GDP/PCE/               Quarterly          Once-per-       Survey       Point-
+   Indicators              Unemployment           2-Years ahead      month                        estimates
+
+ Survey of Professional    GDP/CPI/               Annual             Once-per-       Survey       Distribution
+   Forecasters             Unemployment           2-Years ahead      quarter
+
+ Federal Funds Rate        Fed decisions          Far                Market-         Market-      Point-
+   Futures1                                                          based           based        estimates
+
+ SOFR options              Fed decisions          Far                Market-         Market-      Distribution
+                                                                     based           based
+
+ Overnight Interest        Fed decisions          Far                Market-         Market-      Point-
+   Rate Swaps                                                        based           based        estimates
+
+ CPI Fixings               CPI releases           One year before    Market-         Market-      Point-
+                                                                     based           based        estimates
+
+ Kalshi                    CPI/Payrolls/GDP       Next release       Market-         Market-      Distribution
+                           releases               & Next 4 FOMC      based           based
+                           & Fed decisions        meetings
+
+
+                                       Table 2: Forecast Tools
+This table shows the available forecast tools along with the relevant variables, the horiozons, how frequently
+they are available, and whether or not they provide only point estimates or full distributions.
+
+
+
+
+                                                     10
+2.2.2   Market-Based Forecasts
+
+Market-based measures offer the advantage of near-instantaneous updating in response to
+news. For monetary policy, key instruments include:
+
+   • SOFR Options, which provide liquid estimates of the distribution of SOFR over
+     quarterly horizons. However, while SOFR futures are one of the most heavily traded
+     interest rate derivatives, their options are much less traded. Moreover, these are options
+     on one-month or three-month average repo rates. Translating these into forecasts for
+     specific FOMC meetings requires strong and unreasonable assumptions. Moreover, the
+     basis between SOFR and the effective federal funds rate can be time-varying and, at
+     times, substantial.
+
+   • Federal Funds Futures, which offer mean rate forecasts by calendar month. Un-
+     fortunately, they do not give the entire distribution of outcomes, unless one is willing
+     to assume that there are only two possible outcomes, which can be problematic in
+     times of high uncertainty or when looking beyond the next meeting, While there was a
+     time when Fed Funds futures options were traded (see Emmons, Lakdawala and Neely
+     (2006)), this came to a halt following the financial crisis back in 2008.
+
+    Overall, we argue that Kalshi should be used to provide risk-neutral pdfs concerning
+FOMC decisions at specific meetings because SOFR is too far removed from the monetary
+policy interest rate decision (both because of the basis and the different time horizon) and
+these are the only other short-term interest rate options that actually trade.
+    For inflation, CPI Fixings provide mean expectations for specific releases but are pri-
+marily institutional products with limited retail accessibility. More broadly, most of the
+markets described above are dominated by large institutions that use them primarily for
+hedging purposes. Outside of prediction markets, we are unaware of any market-based fore-
+casts for other important upcoming releases such as payrolls, unemployment, GDP, or core
+CPI. There are also inflation swaps and options, but these have much longer maturities (see
+Diercks, Campbell, Sharpe and Soques (2023) for analysis of the relative forecast performance
+of inflation swaps).
+
+
+2.3     Volume
+Given that Kalshi is relatively new when compared to more established markets such as Fed
+Funds futures, it is natural to wonder about its liquidity. Liquidity is important as it helps
+to ensure prices reflect real-time information from incoming news. As noted above, in recent
+
+
+                                              11
+years, quotes on options for Fed Funds futures have been provided on an indicative basis,
+but are not actually traded.
+   In contrast, Kalshi contracts for the federal funds rate have relatively large liquidity.
+Figure 2 shows a volume heatmap for every contract dating back to 2021 for the federal
+funds rate. In this figure, the darker the shading, the greater the volume. One can see that
+recent periods have had volumes greater than a million for several strikes.
+
+                                                                                                                                                                           Kalshi Federal Funds Rate Volume Heatmap                                                                                                                                                                                             10 4
+                                                                                                                                                                                                                                                                                                                                                                                                               10
+                 6.50%                                                                                                                                                                                13700            93
+
+                 6.25%                                                                                                                                10           425          386                                13586        1000         1126
+
+                 6.00%                                                                                                                                959          218          124      4625         3853         28531        9888         6264     1107                                                                                                                                                     9
+
+                 5.75%                                                                                                                            1496             364      3063         21432        26187        55309        78013        29348    3880     19757
+
+                 5.50%                                                                                                                            15743        4232         31217       135918       430128       435991       398292       102763    78259    62082   269920    63297    18254     39172    21479     10881
+
+                                                                                                                                                                                                                                                                                                                                                                                                               8
+                 5.25%                                                                                                               83258        58255        67146       161170       426964        47521        64034        35001       417736    66689   705301 1342424 1159273 575701         38975    198298    25724                 1108         3131
+
+                 5.00%                                                                                                              121518       137456       338556       680849        49185        30240        17937        30921       209438   399013    81131    67497    80483   1165703 120983      28224     27913                     396      14364                                           75
+
+                 4.75%                                                                                                      85811   275691       600132       813774       100045        22472        17311        17811        17473                357892   114276    68586    10182   485762    241713    135887    55816                 2188         10279        64          874                1175
+                                                                                                                                                                                                                                                                                                                                                                                                               7
+                 4.50%                                                                                                     377423    59977       673232       131867        67742        11418        5335         7308         8121                  45898    29644    93274    14291    67110    183531    348847    77774        153     180391       251568    6824        12505        7008      12642
+
+                 4.25%                                                                                                     197058    24840        44720        21059        26217        80016        5417         2261         10020                         132250   232009    22895    9372      37099    181591   166273    34006       3675715 393971        105523       35719        10459     23683
+
+                 4.00%                                                                                         146841      112395    19248        50455        14486        7773         3317             919      2460         3047                                    49362    23743    11237     10886    219631    52985   199435 2633126 143689               17722       9684        700088     18089    6
+
+                 3.75%                                                                                         261046      107499    9189             83       33248        5416             96           373      2160             627                                                   10806     14040    16109     7820     26836        68231        27545    13444       4765         2606      9238
+ Interest Rate
+
+
+
+
+                 3.50%                                                                             47520        94346       90013    11081            82       5365             200          189      10087            280           1                                                              14108    13979     11605    23572        12031        21861    3481        10358        1171      2988
+                                                                                                                                                                                                                                                                                                                                                                                                               5
+                 3.25%                                                                            429535        78681       69599         7           83           251          595          171          187          280           1                                                                        9476     12513    3600         10921        21314    6966        3778         3475      1813
+
+                 3.00%                                                                            510824        20823       50906         2           82           725          227          289          187          381          716                                                                                             300      3702        148004    9823                               2532
+
+                 2.75%                                                                    33982   221167        26838       34587         2           182          689          282                                                                                                                                                 409      1789         19592    39050                              3089
+                                                                                                                                                                                                                                                                                                                                                                                                               4
+                 2.50%                                                                   321904    60268        21952       28757         1
+
+                 2.25%                                                                   195053    23484        6081        27645         1
+
+                 2.00%                                                                    69729    13267        3148        20662         1                                                                                                                                                                                                                                                                    3
+
+                 1.75%                                                           88825    29156    4394         12385       18746        520
+
+                 1.50%                                                          262516    10083    15043        2710        13235
+                                                                                                                                                                                                                                                                                                                                                                                                               2
+                 1.25%                                                           84161    27162    7548         2485        10305
+
+                 1.00%                                                  97442    51470    22035    7139         1010        9016
+
+                 0.75%                                         15328   237864    28024    10836    3928         1567        16931                                                                                                                                                                                                                                                                              1
+
+                 0.50%                                        336882    40999    38965    5214         407          80      12032
+
+                 0.25%    8679     3226      2704     9971    253281    27816    6032     9187         343      1046        19056
+                           21
+
+
+                                    21
+
+
+                                              21
+
+
+                                                       22
+
+
+                                                                22
+
+
+                                                                         22
+
+
+                                                                                  22
+
+
+                                                                                           22
+
+
+                                                                                                    22
+
+
+                                                                                                                 22
+
+
+                                                                                                                             22
+
+
+                                                                                                                                      23
+
+
+                                                                                                                                                   23
+
+
+                                                                                                                                                                23
+
+
+                                                                                                                                                                             23
+
+
+                                                                                                                                                                                          23
+
+
+                                                                                                                                                                                                       23
+
+
+                                                                                                                                                                                                                    23
+
+
+                                                                                                                                                                                                                                 23
+
+
+                                                                                                                                                                                                                                              24
+
+
+                                                                                                                                                                                                                                                       24
+
+
+                                                                                                                                                                                                                                                                24
+
+
+                                                                                                                                                                                                                                                                         24
+
+
+                                                                                                                                                                                                                                                                                  24
+
+
+                                                                                                                                                                                                                                                                                           24
+
+
+                                                                                                                                                                                                                                                                                                     24
+
+
+                                                                                                                                                                                                                                                                                                               24
+
+
+                                                                                                                                                                                                                                                                                                                        25
+
+
+                                                                                                                                                                                                                                                                                                                                 25
+
+
+                                                                                                                                                                                                                                                                                                                                              25
+
+
+                                                                                                                                                                                                                                                                                                                                                           25
+
+
+                                                                                                                                                                                                                                                                                                                                                                    25
+
+
+                                                                                                                                                                                                                                                                                                                                                                                25
+
+
+                                                                                                                                                                                                                                                                                                                                                                                             25
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                       25
+                         20
+
+
+                                  20
+
+
+                                            20
+
+
+                                                     20
+
+
+                                                              20
+
+
+                                                                       20
+
+
+                                                                                20
+
+
+                                                                                         20
+
+
+                                                                                                  20
+
+
+                                                                                                               20
+
+
+                                                                                                                           20
+
+
+                                                                                                                                    20
+
+
+                                                                                                                                                 20
+
+
+                                                                                                                                                              20
+
+
+                                                                                                                                                                           20
+
+
+                                                                                                                                                                                        20
+
+
+                                                                                                                                                                                                     20
+
+
+                                                                                                                                                                                                                  20
+
+
+                                                                                                                                                                                                                               20
+
+
+                                                                                                                                                                                                                                            20
+
+
+                                                                                                                                                                                                                                                     20
+
+
+                                                                                                                                                                                                                                                              20
+
+
+                                                                                                                                                                                                                                                                       20
+
+
+                                                                                                                                                                                                                                                                                20
+
+
+                                                                                                                                                                                                                                                                                         20
+
+
+                                                                                                                                                                                                                                                                                                   20
+
+
+                                                                                                                                                                                                                                                                                                             20
+
+
+                                                                                                                                                                                                                                                                                                                      20
+
+
+                                                                                                                                                                                                                                                                                                                               20
+
+
+                                                                                                                                                                                                                                                                                                                                            20
+
+
+                                                                                                                                                                                                                                                                                                                                                         20
+
+
+                                                                                                                                                                                                                                                                                                                                                                  20
+
+
+                                                                                                                                                                                                                                                                                                                                                                              20
+
+
+                                                                                                                                                                                                                                                                                                                                                                                           20
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                     20
+                      1/
+
+
+                                  1/
+
+
+                                             /
+
+                                                     1/
+
+
+                                                              1/
+
+
+                                                                       1/
+
+
+                                                                                1/
+
+
+                                                                                         1/
+
+
+                                                                                                  1/
+
+
+                                                                                                                /
+
+
+                                                                                                                            /
+
+                                                                                                                                    1/
+
+
+                                                                                                                                                 1/
+
+
+                                                                                                                                                              1/
+
+
+                                                                                                                                                                           1/
+
+
+                                                                                                                                                                                        1/
+
+
+                                                                                                                                                                                                     1/
+
+
+                                                                                                                                                                                                                   /
+
+
+                                                                                                                                                                                                                                /
+
+                                                                                                                                                                                                                                            1/
+
+
+                                                                                                                                                                                                                                                     1/
+
+
+                                                                                                                                                                                                                                                              1/
+
+
+                                                                                                                                                                                                                                                                       1/
+
+
+                                                                                                                                                                                                                                                                                1/
+
+
+                                                                                                                                                                                                                                                                                         1/
+
+
+                                                                                                                                                                                                                                                                                                    /
+
+
+                                                                                                                                                                                                                                                                                                             /
+
+                                                                                                                                                                                                                                                                                                                      1/
+
+
+                                                                                                                                                                                                                                                                                                                               1/
+
+
+                                                                                                                                                                                                                                                                                                                                            1/
+
+
+                                                                                                                                                                                                                                                                                                                                                         1/
+
+
+                                                                                                                                                                                                                                                                                                                                                                  1/
+
+
+                                                                                                                                                                                                                                                                                                                                                                              1/
+
+
+                                                                                                                                                                                                                                                                                                                                                                                            /
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                      /
+                                          /1
+
+
+
+
+                                                                                                             /1
+
+
+                                                                                                                         /1
+
+
+
+
+                                                                                                                                                                                                                /1
+
+
+                                                                                                                                                                                                                             /1
+
+
+
+
+                                                                                                                                                                                                                                                                                                 /1
+
+
+                                                                                                                                                                                                                                                                                                          /1
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                         /1
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                   /1
+                    7/
+
+
+                                9/
+
+
+
+
+                                                   1/
+
+
+                                                            3/
+
+
+                                                                     5/
+
+
+                                                                              6/
+
+
+                                                                                       7/
+
+
+                                                                                                9/
+
+
+
+
+                                                                                                                                  2/
+
+
+                                                                                                                                               3/
+
+
+                                                                                                                                                            5/
+
+
+                                                                                                                                                                         6/
+
+
+                                                                                                                                                                                      7/
+
+
+                                                                                                                                                                                                   9/
+
+
+
+
+                                                                                                                                                                                                                                          1/
+
+
+                                                                                                                                                                                                                                                   3/
+
+
+                                                                                                                                                                                                                                                            5/
+
+
+                                                                                                                                                                                                                                                                     6/
+
+
+                                                                                                                                                                                                                                                                              7/
+
+
+                                                                                                                                                                                                                                                                                       9/
+
+
+
+
+                                                                                                                                                                                                                                                                                                                    1/
+
+
+                                                                                                                                                                                                                                                                                                                             3/
+
+
+                                                                                                                                                                                                                                                                                                                                          5/
+
+
+                                                                                                                                                                                                                                                                                                                                                       6/
+
+
+                                                                                                                                                                                                                                                                                                                                                                7/
+
+
+                                                                                                                                                                                                                                                                                                                                                                            9/
+                                       12
+
+
+
+
+                                                                                                         11
+
+
+                                                                                                                     12
+
+
+
+
+                                                                                                                                                                                                            11
+
+
+                                                                                                                                                                                                                         12
+
+
+
+
+                                                                                                                                                                                                                                                                                              11
+
+
+                                                                                                                                                                                                                                                                                                        12
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                     10
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                12
+                                   Figure 2: Volume Heatmap for Kalshi Federal Funds Rate Forecasts
+This chart shows the volume for each strike price for each meeting as of June 2025. Each box is shaded
+based on the level of volume, with darker boxes corresponding to greater volume.
+
+
+   The volume over time has been growing in this market. Figure 3 shows that the volume
+has been frequently above a million in recent years, with the peak recently reaching close to
+100 million in volume for the September FOMC. These volumes compare favorably to SOFR
+options, as well.
+
+
+3                          Converting Kalshi into Probability Distributions
+Kalshi structures financial and macroeconomic contracts as a series of binary options that
+pay $1 if the realized outcome exceeds a specified strike. Figure 4 illustrates this structure
+for the December 2025 FOMC meeting. Each contract allows users to trade “Yes” or “No”
+positions, depending on whether they believe the event will occur. Our objective is to convert
+the market prices of these binary contracts into an implied probability distribution, updated
+daily, to produce high-frequency forecasts for key macroeconomic variables.
+
+                                                                                                                                                                                                                  12
+Figure 3: Volume Time Series for Kalshi Federal Funds Rate Markets (Log Scale)
+The chart shows the total volume for each FOMC meeting based on the log scale dating back to 2021. These
+values reflect the sum of the markets for the Federal Funds Rate Decision and the Federal Funds Target
+Rate.
+
+
+Methodology. We begin by scraping trade-level data from Kalshi. We then apply a
+straightforward mapping from market prices to probability mass, treating the price of a
+“Yes” contract as the market-implied risk-neutral probability that the event occurs. In
+contracts that cash as long as the outcome exceeds the strike (rather than the outcome
+falling in a specific bin), we calculate the probability of the outcome by subtracting from
+the “Yes” price of exceeding the previous strike. For instance, in Figure 4, the 4.0 strike
+has a last-traded price of $0.40, while the 4.25 strike has a last-traded price of $0.22, so we
+calculate an 18% probability the Fed Funds rate falls between 4.0 and 4.252 .
+    In the event a strike has no traded contracts on a day, we carry over the last-traded strike
+from a previous day. Sometimes, two strikes have the same price3 , and in that case we assign
+the probability to the outcome closer to the mode. This simple, model-free approach allows
+us to construct a daily-updating risk-neutral pdf over the relevant outcome space. Once we
+have the risk-neutral pdf, we can immediately work out the implied moments, notably the
+mean. In subsequent sections, we demonstrate that this parsimonious approach improves
+forecast performance and enhances analytical flexibility over existing forecast tools.
+
+Caveats and Discussion. While our approach is straightforward, there are some caveats
+worth noting. First, as with all options, it is giving risk-neutral probabilities under the
+Q measure, not actual physical probabilities under the P measure. In other words, the
+probabilities may be distorted by risk premia. The retail investor base of Kalshi might alter
+the risk premia properties. We will return to assessing the risk premia later. Separately, the
+outermost (tail) contracts often suffer from low trading volume, which can lead to stale prices
+   2
+     Kalshi’s contract is denoted for the upper bound of the FFR, so in practice the probability allocated
+between 4.0 and 4.25 being 18% implies a 18% chance on the target range being 4.0-4.25.
+   3
+     This happens mostly near the tails, since prices are bounded between $0.01 and $0.99.
+
+
+                                                   13
+                 Figure 4: Fed Funds Rate for December 2025 contract
+The prices shown in this figure were captured on July 22, 2025. The underlying contract is for determining
+the federal funds rate in December. In this market, the upper bound of the range is considered when
+evaluating the outcome. The “Above 4.25” outcome corresponds to the target range or no further rate cuts
+by December 2025, as of the time the image was captured.
+
+
+and noisy estimates in the tails of the distribution—especially in illiquid markets. However,
+these issues are not unique to Kalshi. SOFR options also suffer from sparse trading in extreme
+outcomes and Fed Funds Futures options over the past several years have not traded at all.
+To mitigate tail-related distortions, we enforce monotonicity in the CDF by constructing
+the distribution outward from the mode toward the tails. This approach prevents stale or
+illiquid pricing in the tails from contaminating the rest of the pdf. We find that enforcing
+monotonicity of our cdf starting from the mode improves the reliability when compared to
+starting on one side or the other when constructing the distributions. We highlight that
+constructing complete distributions from Kalshi’s economic contracts can have challenges,
+and we intend to make public complete code packages which do so from trade-level and
+bid-ask data.
+     Even with these limitations, the probability distributions implied by Kalshi prices com-
+pare favorably to these alternative market-based forecasts when evaluated on predictive
+accuracy. While refinements—such as inferring probabilities from the midpoint of bid-ask
+spreads—may further improve precision, we find such enhancements are not necessary to
+deliver forecasting gains.4 More importantly, Kalshi provides the fastest-updating distribu-
+tions currently available for many key macroeconomic indicators, and the only reasonable
+   4
+    We find that midpoints of bid-ask spreads seem to introduce additional issues due to occasionally large
+spreads on tail outcomes. See the Appendix for more discussion.
+
+
+
+                                                    14
+distributions available for macroeconomic indicators like GDP, Unemployment, or Core CPI.
+It is also the only financial option with active trading which directly gives beliefs about the
+Federal Funds rate.
+
+
+4     Time-Series Comparisons to Existing Benchmarks
+A natural question is how the time-series evolution of Kalshi-implied forecasts compares to
+established benchmarks. In this section, we document both the similarities and differences
+between Kalshi and more traditional market-based measures, such as Federal Funds futures
+and overnight index swap (OIS) rates.
+
+Federal Funds Rate Projections. Figure 5, left panel, displays the evolution of federal
+funds rate expectations following the December 2024 FOMC meeting. The Kalshi-implied
+mean forecast (red line) closely tracks both market-based expectations and the consensus
+from the Survey of Market Expectations. Notably, the sharp decline in forecasts at the end
+of July—following the FOMC’s signal of a likely rate cut in September—is more pronounced
+in the OIS and fed funds futures data. In contrast, the Kalshi mean and the SME consensus
+exhibit a more gradual adjustment, with broadly similar timing and magnitude.
+
+
+
+
+                    Figure 5: FOMC Federal Funds Rate Comparisons
+The chart on the left shows the federal funds rate projections for the period following the December 2024
+FOMC meeting. OIS YE 2024 corresponds to the overnight index swap rate for the end of 2024. The PDS
+Median path of modes corresponds to the Survey of Market Expectations median of modal path projection
+for the federal funds rate. The chart on the right shows similar projections for the June 2025 FOMC meeting.
+
+
+   In the right panel, we see that the projections for June 2025 FOMC are also fairly similar
+across the different approaches. One slight difference is that the Kalshi mean did not decline
+
+
+
+                                                    15
+as much in early April, which ended up being prescient given the developments that unfolded
+during that period.
+
+Federal Funds Rate Intermeeting Period Dynamics. We can also more closely track
+the time series of probabilities for particular rate outcomes for a given meeting. For instance,
+in Figure 6, we plot the time series of the probability of the most likely rate outcome for
+the July 2025 FOMC (blue line). For July 2025, this corresponds to the probability of no
+rate change. One can see that the probability of no rate change declined following several
+communications that were interpreted by investors as more accommodative than expected.
+This led the probability to fall below 80%. It wasn’t until the June Nonfarm Payrolls report
+that the probability of no rate change jumped above 90%.
+
+                                      100                                                 Powell
+                                                                                    "won't rule out cut"
+                                                                                                June
+Probability of most likely outcome
+
+
+
+
+                                              Waller          Powell                            NFP
+                                       95   comments     "well positioned"
+                                                                           May
+                                                        Bowman           Core PCE
+                                                       comments
+
+                                       90
+
+
+                                       85
+
+
+                                       80
+                                                                                                                                   July 2025 FOMC
+                                                                                                                                   Median FOMC
+                                       75
+                                                                                                                                   25th/75th percentiles
+
+                                       70
+
+
+                                                                  35                     28                        21         14     7                     0
+                                                                                                           Days before FOMC
+
+                                     Figure 6: Probability of Most Likely Rate Outcome Before July 2025 FOMC
+The chart shows the probability of the most likely outcome for the July 2025 FOMC (blue line), in this case
+for no rate change. The rest of the historical distribution in terms of the 25th to 75th percentile is shown in
+gray, with the dashed black line reflecting the median.
+
+
+
+CPI Inflation Projections. Kalshi also provides mean forecasts for CPI. The chart on
+the left of Figure 7 shows that the May 2025 CPI had been drifting down following the
+release of the April 2025 CPI which came in lower than expected, as shown by the right
+panel. This chart demonstrates that both the Bloomberg consensus and the Kalshi-implied
+mean can at times line up closely. However, a key difference is that Bloomberg consensus
+has no time series and is only available in the months before a release. For instance, we
+learn that developments around early April caused a spike in expectations for inflation, but
+
+
+
+                                                                                                              16
+this did not persist. The evolution of these dynamics are not possible to observe for the
+Bloomberg Consensus.
+
+
+
+
+             Figure 7: Kalshi CPI Comparisons to Bloomberg Consensus
+The chart on the left shows the year-over-year May 2025 CPI projection coming from the Kalshi market and
+the Bloomberg consensus. The chart on the right shows the year-over-year April 2025 CPI projection.
+
+
+
+Year-end Projections for CPI and GDP. In addition to year-over-year monthly read-
+ings, Kalshi also tracks Q4/Q4 projections for CPI and GDP. The chart on the left of Figure
+8 shows that the one-year inflation swap (solid black line) lines up fairly closely with the
+Kalshi-implied mean (red line). The Blue Chip Economic Indicators 2025 inflation, which is
+available only at lower frequency, also lines up very closely with the other two approaches.
+    The chart on the right is the one that is unique to Kalshi. Previously, there did not
+exist a market-implied forecast of GDP growth. The right panel shows that the Kalshi-
+implied mean tracked very closely the Survey of Market expectations. We also include the
+TIPS 2-year real yield as another proxy for growth. All of the series show a decline from
+the beginning of the year by close to one percentage point, with recent dynamics moving
+roughly sideways.
+
+Projections for Unemployment. Kalshi offers a rare source of market-based forecasts
+for labor market indicators such as unemployment and payrolls—variables for which no liquid
+financial markets currently exist. Aside from prediction markets, forecasts for these releases
+are primarily derived from surveys. However, survey-based estimates are not updated in real
+time and are only available at low frequency.
+    The chart on the left of Figure 9 shows that both the Bloomberg Consensus and the
+Kalshi-implied mean accurately anticipated the May 2025 unemployment release. For June
+2025, both forecasts overestimated the actual unemployment rate, but the Kalshi mean was
+closer to the realized value than the Bloomberg Consensus.
+
+                                                  17
+                              Figure 8: Year of 2025 Comparisons
+The chart on the left shows the year of 2025 CPI inflation projection for Kalshi, a one-year inflation swap,
+and the Blue Chip Economic Indicators consensus expectation for the year 2025. The chart on the right
+shows the real GDP growth projections for 2025 from Kalshi, the Survey of Market Expectations, and the
+Blue Chip Economic Indicators. Also included is the TIPS real 2-year yield as a proxy for real growth.
+
+
+5     Distributional Comparisons to Existing Benchmarks
+Kalshi vs Fed Funds Futures. A key strength of the Kalshi market is the probability
+distribution provided by its market structure. In contrast, fed funds futures require binomial
+tree assumptions which enforce just two possible outcomes.
+    For instance, Figure 10 provides a comparison for the September 2025 FOMC meeting.
+The panel on the left shows the implied probabilities based on two outcomes, no rate change
+and one 25 basis point cut. In contrast, the Kalshi distribution provides a richer set of
+outcomes as it does not face the same set of restrictions. While the fed funds futures
+suggests a weight of 0.75 on a 25 basis point cut, this is likely lumping in weight on lower
+rate outcomes, as shown by the Kalshi chart on the right. Instead, according to the Kalshi
+chart, there is much greater uncertainty as investors do not put such a large weight on the
+modal outcome of a quarter-point rate cut.
+    We can see a similar issue for the October 2025 FOMC meeting shown in Figure 10. The
+Kalshi market implies there is nonzero weight on seven different outcomes. When we instead
+use Fed Funds futures, we have to make an assumption of just two possible outcomes, which
+clearly implies too little uncertainty.
+
+Kalshi vs SOFR Options. While the fed funds futures can be quite restrictive in for-
+mulating probabilities, a suitable alternative is one based on SOFR options. SOFR options
+have been around since January 2020. One issue with SOFR options is that the contracts
+that are liquid are for three month periods. This makes them difficult to interpret, as they
+
+                                                    18
+                           Figure 9: Unemployment Comparisons
+The chart on the left shows the unemployment projections for May 2025. The chart on the right shows the
+unemployment projections for June 2025.
+
+
+average over multiple FOMC meetings. In contrast, the Kalshi distribution is specific to
+each meeting.
+    Another issue is that SOFR contracts settle to the repo rate which has a spread with
+respect to the effective federal funds rate. This spread has grown over time and is expected
+to continue to grow amid balance sheet runoff by the Federal Reserve. A several basis point
+difference may seem small, but this can dramatically affect probabilities.
+    Figure 11 shows the SOFR option-implied distribution for Q4 2025 (the three months to
+mid-December) implied a modal outcome of no rate cuts. In contrast, the Kalshi distribution,
+constructed as the average of the September and October densities, along with fed funds
+futures, implied greater weight on a 25 basis point rate cut. This is likely driven, in part by
+the roughly 6 basis point spread between SOFR and the effective federal funds rate. While
+one could consider a crude lateral shift of the SOFR distribution, there’s little evidence
+to suggest the SOFR-EFFR spread follows a normal distribution, so this adjustment could
+introduce further noise. The fact that the underlying SOFR rate is meaningfully higher
+implies an upward bias in the probabilities implied by the SOFR distribution. Since the
+Kalshi market is directly tied to the federal funds rate, it does not suffer from this issue
+making it the best available density forecast for the funds rate.
+
+Kalshi vs SOFR Investors.            Another key distinction between the SOFR market and
+Kalshi is related to the investors in each market. Kalshi tends to attract the retail investor
+with its relatively low entry cost. In contrast, the SOFR market tends to have larger in-
+stitutional investors. It seems plausible that large institutional investors may have greater
+hedging needs and this could also play a role in the observed upward bias for this period.
+    The idea is that institutional firms may have large fixed income exposure and may wish
+
+                                                  19
+ Figure 10: Fed Funds Futures vs Kalshi Sept. and Oct. 2025 FOMC Meetings
+The upper left panel shows the implied probability from Fed Funds futures for the September FOMC meet-
+ing. We use the price of the Fed Funds futures contract for October to determine the probabilities which
+are assumed to have just two possible outcomes. The upper right panel shows the corresponding Kalshi
+distribution that does not enforce the assumption of just two outcomes. The lower left panel shows the
+implied probability from fed funds futures for the October FOMC meeting. For parsimony, we use the price
+of the fed funds futures contract for November to determine the probabilities. The lower right panel shows
+the equivalent Kalshi distribution.
+
+
+
+
+                                                   20
+            Figure 11: SOFR Options vs Kalshi Q4 2025 FOMC Meeting
+The left panel shows the implied probability from SOFR options for the fourth quarter of 2025. This is
+defined as mid-September to mid-December 2025. The right panel shows the equivalent Kalshi distribution,
+which is computed by averaging over the September and October 2025 FOMC meetinigs.
+
+
+to hedge against a scenario where rates remain elevated or where bond prices may fall. This
+would push up the demand for options for the no rate change outcome while pushing up the
+prices of these options, which would increase the implied probability of this outcome. But
+this would be more indicative of risk premiums rather than expectations. Indeed, survey-
+based evidence coming from the Survey of Market Expectations (not shown) also suggests
+greater weight on rate cuts than implied by SOFR options, which is consistent with Kalshi.
+
+2025 Inflation and GDP Growth Distributions. As previously noted, a unique aspect
+of Kalshi is the availability of real-time GDP growth distributions. Figure 12 shows the
+Kalshi probability distribution for CPI and real GDP Growth over 2025. Interestingly, it
+suggests that investors are placing greater weight on outcomes for growth below 1% and for
+CPI inflation to be above 3.5% when compared to the beginning of the year. These moves
+seem consistent with market commentary highlighting the potential effects of trade policy
+developments over this past year.
+    A read from July 3rd, 2025 on the probability of GDP growth being below 1% was
+close to 0.4. This might seem large, but the July Blue Chip Economic Indicators consensus
+forecast for 2025 GDP growth is 1.4, which is roughly consistent with the median of the
+Kalshi distribution. The consensus forecast for 2025 CPI from the Blue Chip survey is
+2.9, which is also close to the median of the Kalshi CPI distribution. However, a key
+difference between Kalshi and the Blue Chip surveys is the availability of the probability
+distribution rather than just a single point estimate. The Kalshi distribution shows how
+uncertain investors are about inflation and GDP growth for this year. While the Survey of
+
+
+                                                  21
+Professional Forecasters also provides distributions for GDP growth and inflation, they are
+only available at a quarterly frequency. The advantage of high frequency data allows for
+analyzing shifts in the distribution of GDP outcomes after large news events (such as trade
+policy changes as shown in Figure 12).
+
+
+
+
+    Figure 12: End of Year 2025 Distributions for CPI and Real GDP Growth
+This chart shows the probability distributions for CPI and real GDP growth for 2025. These are calculated
+as December 2024 to December 2025 for CPI, and 2024Q4 to 2024Q5 for real GDP growth.
+
+
+
+Stagflation risks. Figure 13 shows the evolution of tail risks to CPI and GDP calculated
+using Kalshi, Survey of Professional Forecasters, and Blue Chip data. Specifically, we plot
+the daily time series for the weight placed on CPI being greater than 3 percent in the upper
+left panel and real GDP growth being lower than 1.5 in the upper right panel. We plot the
+equivalent SPF probabilities based on the first and second quarter readings. We also plot
+the percent of respondents from Blue Chip Economic Indicators with a modal expectation
+above 3 percent, though note that this is no way a density forecast. For inflation, we can
+see that all three series seemed to increase around the beginning of April, consistent with
+concerns regarding inflation associated with trade developments. We see the probability
+
+
+                                                   22
+come down as news of trade alleviation becomes more prominent later in the sample. We
+see similar dynamics for real GDP potentially being below 1.5 percent. All of the Kalshi and
+SPF densities are marginal ones; we have no way of measuring the joint probability of high
+inflation and low growth.
+    For the severe stagflation outcomes, with inflation being above 4 percent (lower left panel)
+or GDP growth being below 0 percent (lower right panel), we see much more weight placed
+on these outcomes for Kalshi than for the surveys. There are a number of explanations that
+could explain the difference between Kalshi and the SPF survey, such as the presence of
+risk premiums or differences in retail investors versus professional forecasters. Nonetheless,
+the latest probabilities in the Kalshi market seem to be consistent with the second quarter
+observation coming from SPF (with the exception of the ≥4% inflation panel).
+
+
+
+
+                     Figure 13: End of Year 2025 Stagflation Risks
+This chart shows the probability of tail risks for CPI and real GDP growth for 2025 over time. These
+are calculated as December 2024 to December 2025 for CPI, and 2024Q4 to 2024Q5 for real GDP growth.
+Probabilities are created by taking the sum of different bins in each period over time.
+
+
+
+
+                                                23
+6    Forecast Performance of Kalshi
+In this section, we explore the forecast performance of Kalshi forecasts of the fed funds rate
+for each FOMC meeting along with the year-over-year CPI inflation for each month since
+2022.
+
+Federal Funds Rate. The Kalshi distribution provides a mean, median, and modal fore-
+cast based on its distribution. A natural question relates to how well these elements forecast
+the federal funds rate after each FOMC meeting.
+    Earlier, in Figure 1, we showed the mean absolute prediction error, averaging across all
+FOMC meetings, plotted against the number of days before the FOMC meeting. That figure
+also shows some comparisons. The forecast performance of Kalshi is roughly consistent with
+professional forecasters such as those from FRBNY’s Survey of Market Expectations. We
+plot one-half standard deviations of forecast errors for the survey and one can see overlap
+with the Kalshi-implied moments. We also plot mean absolute forecast errors coming from
+fed funds futures (purple line), and note the slight improvement with about 60 days to go
+for Kalshi. Also of note, the mode coming from Kalshi’s distribution has had a zero absolute
+average error by the day of the FOMC, which is in contrast to the survey and fed funds
+futures. The observation that drives this distinction was the September 2024 FOMC, in
+which there was probability on both a 25 and 50 basis point cut, and Kalshi put greater
+weight on the 50 basis points that turned out to be correct.
+
+CPI. In Figure 14, we see a similar decline in the average absolute error for CPI annualized
+inflation forecasts as we get closer to the release date. In contrast to Kalshi, we only observe
+the Bloomberg Consensus forecast just before the data release and thus cannot evaluate its
+evolution over time. Thus, the Kalshi can provide a read of expectations for these monthly
+releases well in advance of the Bloomberg consensus.
+    For headline CPI, the mean absolute error from Kalshi as of the day of the release is
+about 7 basis points, while the Bloomberg consensus is about 8 basis points.
+
+Unemployment. Kalshi also provides real-time distributions for expectations of the un-
+employment rate. As with real GDP growth, options markets do not exist for unemployment,
+which makes Kalshi unique in terms of providing a distribution for unemployment expecta-
+tions. Figure 14 shows that the average absolute error for the mean coming from Kalshi is
+fairly close to the Bloomberg consensus forecast, while the mode tends to jump around as it
+must take values in increments of 0.1.
+
+
+
+                                              24
+Figure 14: Headline, Core CPI and Unemployment Forecast Errors Comparison
+This figure compares the mean absolute errors from 50 days out to each headline CPI, core CPI, and
+unemployment release since 2022.
+
+
+
+
+                                               25
+Significance of differences in forecast accuracy Table 3 compares the mean absolute
+error and the root mean square error on the day of the release for the Kalshi mean, me-
+dian and mode forecasts with that from the Bloomberg consensus. Statistical significance
+from Diebold-Mariano statistics (Diebold and Mariano, 1995) comparing each of the Kalshi
+forecasts to the Bloomberg consensus is also noted. In some cases, the Kalshi forecast is a
+significant improvement over the Bloomberg consensus. For example, the Kalshi median and
+mode have significantly smaller mean absolute error than the Bloomberg consensus for head-
+line CPI. In other cases, there is no statistically significant difference between Kalshi and
+Bloomberg forecast accuracy. In no case is Kalshi significantly worse than the Bloomberg
+consensus.
+                                       Panel A: Macro Variables
+                        Bloomberg          Kalshi Mean       Kalshi Median       Kalshi Mode
+
+            Headline CPI
+            MAE            0.081              0.069              0.063*              0.063*
+            RMSE           0.100              0.080**             0.083              0.087
+
+            Core CPI
+            MAE            0.070              0.070               0.080              0.070
+            RMSE           0.100              0.090               0.110              0.100
+
+            Unemployment Rate
+            MAE            0.109              0.117               0.107              0.107
+            RMSE           0.132              0.136               0.132              0.135
+
+
+                                     Panel B: Federal Funds Rate
+                       FF Futures         Kalshi Mean        Kalshi Median       Kalshi Mode
+
+           MAE             0.010              0.010              0.000**            0.000**
+           RMSE            0.020              0.030              0.000**            0.000**
+
+
+           Table 3: Forecast Accuracy: Benchmark Forecasts versus Kalshi
+Panel A reports forecast accuracy relative to the Bloomberg consensus forecast on the day of the release.
+Panel B reports forecast accuracy relative to fed funds futures on the day of the FOMC. Stars indicate
+statistically significant differences in forecast accuracy relative to the benchmark based on Diebold–Mariano
+tests. Stars denote significance levels: ∗ p < 0.10, ∗∗ p < 0.05, ∗∗∗ p < 0.01.
+
+
+
+
+6.1     Probability Integral Transform
+As noted earlier, the Kalshi-implied density is under the risk-neutral Q measure which,
+given risk premia, is not necessarily the same as the physical P measure. The extent to
+
+                                                      26
+which Kalshi-implied pdfs are distorted by risk premia is an empirical question. If the
+Kalshi-implied density were indeed the physical density of the future variable, then it is
+well known that the cumulative distribution function, evaluated at the realized value, should
+be uniform on the unit interval (see, for example, Diebold et al. (1998)). We assess this
+in Figure 15 for forecasts for monthly releases of unemployment, CPI (headline and core)
+and FOMC decisions on the target federal funds rate. These are constructed both 28 days
+before the release and on the day of the release, but before it. The probability integral
+transforms generally seem close to uniform. We can test the hypothesis that they are uniform
+in population using the test statistics:
+
+                                       K = sup Ψ(r)                                         (1)
+                                             0≤r≤1
+
+and                                         Z 1
+                                       C=         Ψ(r)2 dr.                                 (2)
+                                             0
+
+where F̂ (r) is the empirical cdf of the PIT and Ψ(r) = T −1/2 (F̂ (r) − r), 0 ≤ r ≤ 1 (Darling,
+1957). The bootstrap p-values using the bootstrap of (Rossi and Sekhposyan, 2019) are also
+shown in Figure 15. In some cases, uniformity is borderline rejected, mostly because low
+values of inflation and unemployment occur a little too frequently. In other cases, the null of
+uniformity is not rejected. Overall, while there is some evidence of risk premia overstating
+the odds of higher inflation and higher unemployment, these probability density functions
+appear to be fairly well calibrated.
+
+
+7     Distributional Responses to News
+7.1    Fed Funds Rate Responses to Macro News
+With access to full distributions, we can uncover new patterns in how macroeconomic news
+affects higher moments of expectations of the federal funds rate at the next FOMC. Figure 16
+shows the average daily response to news for the mean, mode, variance, and skewness coming
+from the distribution of the federal funds rate for the next FOMC. The news releases we
+focus on are CPI, PCE inflation, Non-farm payrolls, ISM manufacturing, FOMC statement,
+and FOMC minutes. We denote all other days as Other.
+
+Fed funds rate mean and mode responses to news. Based on responses since 2022,
+we see that CPI days tend to have the largest positive effects on the first moment of the
+federal funds rate distribution. This could be a reflection of the sample period, as there
+
+
+                                                 27
+                          0 Days Ahead                                       28 Days Ahead
+                          Unemployment                                       Unemployment
+           0.5                                               0.5
+                      K:0.05                                            K:0.03
+                      C:0.04                                            C:0.03
+
+
+             0                                                 0
+              0     0.2     0.4     0.6    0.8      1           0      0.2     0.4    0.6    0.8      1
+                          Headline CPI                                        Headline CPI
+           0.5                                               0.5
+                      K:0.06                                            K:0.03
+                      C:0.04                                            C:0.04
+
+
+             0                                                 0
+              0     0.2     0.4     0.6    0.8      1           0      0.2     0.4    0.6    0.8      1
+                               Core CPI                                          Core CPI
+           0.5                                               0.5
+                      K:0.41                                            K:0.20
+                      C:0.28                                            C:0.44
+
+
+             0                                                 0
+              0     0.2     0.4     0.6    0.8      1           0      0.2     0.4    0.6    0.8      1
+                           Fed Funds                                           Fed Funds
+           0.5                                               0.5
+                      K:0.25                                            K:0.52
+                      C:0.28                                            C:0.62
+
+
+             0                                                 0
+              0     0.2     0.4     0.6    0.8      1           0      0.2     0.4    0.6    0.8      1
+
+
+
+
+                           Figure 15: Probability Integral Transform
+This figure show the empirical cumulative distribution function as of 0 and 28 days before unemployment,
+CPI (headline and core) and FOMC scheduled federal funds rate announcements, all evaluated at the realized
+value. If the options-implied distribution were equal to the physical distribution, then this probability integral
+transform would be uniform in population, as shown by the lines. Each panel also reports the p-values from
+the test statistics k and C, defined in the text, using the bootstrap of Rossi and Sekhposyan (2019)
+
+
+
+
+                                                        28
+were several announcements of higher-than-expected inflation in this particular period and
+is consistent with the importance of inflation for rate setting in the post-pandemic period.
+We also see that CPI, Non-farm Payrolls, and FOMC Minutes/Statement days on average
+result in the largest changes in central moments of the distribution of Federal Funds Rates,
+coinciding with market commentary typically placing the largest emphasis on these events.
+We are assured that our constructed distributions move signficantly more on news release
+days than other days.
+
+Fed funds rate variance and skewness responses to news. We can also see the effects
+of news on the variance and skewness of the fed funds rate distributions in panel B of Figure
+16. Intuitively, nearly all of the news announcements lower the variance. While variance
+typically decreases on any day (consistent with a general resolution of uncertainty over time),
+news days result in larger variance declines than other days, consistent with the idea that
+news days are informative for understanding future Federal Funds Rate distributions. As
+one might expect, the largest decline in the variance of the fed funds rate distributions comes
+on FOMC days, with CPI days generating the second largest decline.
+    In terms of skewness, we see that nonfarm payrolls days and FOMC days tend to have
+the largest positive effect. While the mode and mean seem to tend to decline on NFP days,
+the rise in skewness suggests that Kalshi investors seem to also place relatively more weight
+on the upper tail of the fed funds rate distributions. In the next sections, instead of just
+examining the responses associated with particular news days, we will sharpen our focus on
+the effects of surprises for each news release.
+
+CPI surprise effects on fed funds rate distributions. We also can evaluate how
+the distribution of the federal funds rate responds to the surprises released in each news
+announcement. Surprises are computed by taking the difference between the Bloomberg
+consensus forecast and the realized print. We first consider CPI inflation, split based on how
+the moments of the Federal Funds rate respond on days of positive and negative surprises,
+and days of zero surprise (expectations are measured to the nearest tenth of a percentage
+point). The results are shown in Figure 17.
+    As expected, the mean of the fed funds rate distribution (left panel) moves positively
+with inflation shocks. However, the magnitude is asymmetric: the response to positive
+CPI shocks is four times that of negative shocks. The variance of the distribution declines
+across all outcomes—reflecting the resolution of uncertainty—but the drop is sharpest when
+the release meets expectations (zero surprise). Additionally, skewness falls and kurtosis
+rises independent of the shock’s direction. To establish the statistical significance of these
+
+
+                                              29
+patterns, we turn to the regression analysis in the next section.
+                                   A. Modal and Mean Responses
+
+
+
+
+                                  B. Variance and Skew Responses
+
+
+
+
+    Figure 16: Federal Funds Rate Distribution Responses to Economic News
+This figure shows the average responses of the distribution of the federal funds rate for the next several
+FOMC meetings following news releases for CPI, PCE inflation, Non-farm payrolls, ISM Manufacturing,
+FOMC, and FOMC minutes. Other corresponds to all other days which do not fall into these categories.
+
+
+
+
+Figure 17: Federal Funds Rate Distribution Responses to CPI Inflation Surprises
+This figure shows the average responses of the distribution of the federal funds rate for the next several
+FOMC meetings following positive, negative and zero news from the CPI inflation release.
+
+
+                                                   30
+7.2     Event-study regressions for fed funds rate beliefs
+7.2.1   Macro news surprises
+
+We next turn to a more systematic analysis of the effects of surprises on the probability
+density of the federal funds rate. We consider event-study regressions of the form:
+
+                                    ∆yt = β0 + β1 St + εt                                  (3)
+
+where ∆yt denotes the one day change in a moment of the federal funds distribution for the
+next FOMC meeting on day t and St denotes the surprise component of an announcement
+coming out on that day. The regression is run over all days of a particular announcement
+type. The announcement types considered are CPI, PCE and nonfarm payrolls. The constant
+measures the effect of the announcement in the absence of any surprise.
+
+CPI significant effect on fed funds rate. The results are shown in Panel A of Table
+4. The mean, median and mode of the funds rate all respond significantly to a CPI surprise
+with a 10 basis point surprise resulting in a 3 to 4 basis point rise in the central moments of
+the federal funds rate. We also see that independent of the surprise, the variance tends to
+fall, as the constant is negative and significant.
+
+PCE less significant effect. Likewise, PCE surprises also have significant effects, but
+to a much lesser extent, as shown in Panel B of Table 4. This is consistent with market
+participants and investors paying more attention to CPI, which is more timely. Moreover,
+much of PCE inflation can be computed based on existing releases of CPI which could explain
+the smaller effects.
+
+Nonfarm payrolls, no significance. In Panel C of Table 4, nonfarm payrolls show a
+positive relationship with the first moments of the fed funds rate distribution, but there is
+no statistical significance beyond the constant for the mean. This seems consistent with
+investors placing much greater emphasis on monetary policy’s potential response to infla-
+tion over the 2022-2025 period when compared to jobs, with the unemployment rate being
+historically low.
+
+7.2.2   Monetary policy surprises
+
+Table 5 presents the response of the federal funds rate distribution to the monetary policy
+shocks of Acosta et al. (2025). This separately identifies shocks in two communication
+
+
+                                              31
+                                     Panel A. CPI Headline YoY
+                                               Kalshi Fed Funds Rate Distribution
+
+                   Mean           Median              Mode         Variance         Skewness   Kurtosis
+
+CPI Surprise       0.320***       0.388***           0.413***       -0.002           -0.183      3.666
+                   (0.052)        (0.079)            (0.079)        (0.011)         (0.448)     (4.676)
+Constant           0.007           0.012             0.017*         -0.004***        -0.028      1.853***
+                   (0.005)        (0.008)            (0.009)        (0.001)         (0.048)     (0.540)
+
+Observations        113             113                113           113              113         113
+    2
+R                  0.379           0.255              0.256         0.001            0.002       0.006
+
+
+
+                                     Panel B. PCE Headline YoY
+                                               Kalshi Fed Funds Rate Distribution
+
+                   Mean           Median              Mode         Variance         Skewness   Kurtosis
+
+PCE Surprise       0.012**        0.015*             0.012*         -0.001           0.001      -0.438*
+                   (0.004)        (0.008)            (0.007)        (0.001)         (0.040)     (0.257)
+                                           *                  *              *
+Constant           -0.003         -0.014             -0.017         -0.002           0.068       1.827***
+                   (0.006)        (0.008)            (0.009)        (0.001)         (0.043)     (0.573)
+
+Observations        113             113                113           113              113         113
+    2
+R                  0.060           0.040              0.023         0.007            0.000       0.007
+
+
+
+                                      Panel C. Nonfarm Payrolls
+                                               Kalshi Fed Funds Rate Distribution
+
+                   Mean           Median              Mode         Variance         Skewness   Kurtosis
+
+NFP Surprise       0.053           0.045              0.045         0.010            -0.061      -4.946
+                   (0.032)        (0.051)            (0.051)        (0.009)         (0.455)     (3.440)
+                            **
+Constant           0.005           0.004              0.004         -0.001           0.037       -0.156
+                   (0.002)        (0.005)            (0.005)        (0.001)         (0.030)     (0.550)
+
+Observations        108             108                108           108              108         108
+R2                 0.056           0.008              0.008         0.011            0.000       0.007
+
+
+        Table 4: Kalshi Fed Funds Rate Distribution Responses to Macro Surprises
+Notes: This table reports estimates of equation (3) using robust standard errors (HC3). Columns represent
+the change in moments of the Federal Funds Rate distribution on the day of the news release (end of previous
+day to end of day of release). Surprises are measured as the actual released value minus the Bloomberg
+survey expectation. Units are percentage points for CPI and PCE (year-over-year) and 100,000s of payrolls
+for Nonfarm Payrolls. Stars denote significance levels: ∗ p < 0.10, ∗∗ p < 0.05, ∗∗∗ p < 0.01.
+
+
+
+                                                       32
+windows: the statement window and the press conference window. We study the effects
+of both monetary policy shocks on the Kalshi-implied federal funds rate distribution at
+horizons out to about 6 months jointly. The results highlight a clear distinction between the
+two communication windows. During the statement window, the shock primarily shifts the
+level of rates: the mean, median, and mode all respond positively and significantly. This
+is not surprising as of course the statement includes the announcement about the current
+target for the federal funds rate. We also observe a significant rise in variance, indicating
+that the tighter policy generates some immediate dispersion in market views.
+
+Press conference effect on skewness. Conversely, we find that the press conference
+shock has a positive, albeit statistically insignificant, effect on the central tendency (mean,
+median, or mode). This lack of significance may stem from the short maturity of the Kalshi
+Fed funds contracts, which limits the sample to a six-month horizon and the press confer-
+ence obviously does not make announcements about the current funds rate target. How-
+ever, the press conference significantly alters the shape of the distribution, causing a sharp
+decline in skewness. This negative shift could possibly reflect that more restrictive than
+expected communication during the press conference effectively truncates the “right tail” of
+the distribution. Tighter monetary policy in the press conference could be resolving upside
+uncertainty—capping the risk of higher rates—while leaving downside risks intact.
+
+                                                Kalshi Fed Funds Rate Distribution
+
+                                Mean       Median       Mode      Variance    Skewness     Kurtosis
+
+ MP Statement Shock             0.872***    1.098**     1.233*      0.249*      -0.763      -6.609
+                               (0.236)     (0.427)     (0.681)     (0.144)     (2.344)     (7.603)
+
+ MP Press Conference Shock      0.011       0.502       0.339       -0.032     -2.875**     -7.807
+                               (0.319)     (0.318)     (0.905)     (0.159)     (1.285)     (7.299)
+
+ Constant                       0.003       -0.004      -0.002     -0.007**     0.050       0.384
+                               (0.004)     (0.010)     (0.013)     (0.003)     (0.053)     (0.320)
+
+ Observations                    94          94           94          94         94          94
+ R2                             0.165       0.106       0.041       0.054       0.050       0.013
+
+
+      Table 5: Kalshi Fed Funds Rate Distribution Responses to MP Shocks
+Notes: Robust standard errors (HC3) in parentheses. Columns report changes in moments of the federal
+funds rate distribution on the day of the news release for meetings more than one month ahead (end of
+previous day to end of release day). Monetary policy shocks are measured using the San Francisco Fed
+USMPD database. ∗ p < 0.10, ∗∗ p < 0.05, ∗∗∗ p < 0.01.
+
+
+
+
+                                                 33
+8    Conclusions
+This paper has introduced Kalshi macroeconomic prediction markets as a novel, high-
+frequency, and distributionally rich source of expectations data. Using newly available con-
+tracts across a broad set of macroeconomic indicators, we have shown that Kalshi-implied
+distributions are well-behaved, responsive to news, and comparable in forecasting accuracy
+to established benchmarks such as the Survey of Market Expectations and the Bloomberg
+consensus. In several cases, they provide unique insights—particularly for variables like GDP
+growth, core inflation, unemployment, and payrolls, for which no other market-based distri-
+butions currently exist. We have also argued that they provide the only credible measures
+of distributional beliefs about decisions at specific FOMC meetings.
+    Our results highlight several key advantages. First, Kalshi’s forecasts for the federal
+funds rate and CPI provide statistically significant improvements over fed funds futures and
+professional forecasters, all while providing continuously updated full distributions rather
+than infrequent point estimates. The mode of the Kalshi distribution, for example, has
+perfectly matched the realized federal funds rate by the day of each meeting since 2022, a feat
+not achieved by either surveys or futures. Second, these markets capture rich distributional
+dynamics—such as tail risks and asymmetries in higher moments—that are unavailable from
+traditional sources. For instance, we find that monetary policy press conference shocks
+tend to significantly reduce skewness in the Federal Funds rate distribution. Third, the
+accessibility of Kalshi to retail traders introduces a perspective distinct from institutionally
+dominated markets, potentially offering a complementary lens on expectations formation.
+    Together, these findings suggest that prediction markets can serve as a valuable comple-
+ment to existing forecast tools in both research and policy settings. By providing transparent,
+continuously updated, and economically interpretable measures of expectations with compet-
+itive forecast performance, they open new avenues for studying monetary policy transmission,
+market sentiment, and macroeconomic uncertainty. As these markets mature and liquidity
+deepens, their potential to enhance real-time policy analysis and academic research will only
+grow over time.
+
+
+References
+Acosta, Miguel, Andrea Ajellp, Michael Bauer, Francesca Loria, and Silvia Miranda-
+  Agrippino (2025) ‘Financial market effects of FOMC communication: Evidence from a
+  new event-study database.’ Federal Reserve Bank of San Francisco Working Paper 2025-
+  30
+
+
+                                              34
+Aı̈t-Sahalia, Yacine (1996) ‘Nonparametric pricing of interest rate derivative securities.’
+   Econometrica 64(3), 527–560
+
+Amin, Kaushik, and Victor K Ng (1997) ‘Inferring future volatility from the information
+ in implied volatility in eurodollar options: A new approach.’ Review of Financial Studies
+ 10(2), 333–367
+
+Ang, Andrew, Geert Bekaert, and Min Wei (2007) ‘Do macro variables, asset markets, or
+ surveys forecast inflation better?’ Journal of Monetary Economics 54(4), 1163–1212
+
+Bakshi, Gurdip, and Dilip B Madan (2000) ‘Spanning and derivative-security valuation.’
+  Journal of Financial Economics 55(2), 205–238
+
+Bakshi, Gurdip, George Panayotov, and George Skoulakis (2011) ‘Improving the predictabil-
+  ity of real economic activity and asset returns with forward variances inferred from option
+  portfolios.’ Journal of Financial Economics 100(2), 340–357
+
+Ball, Clifford A, and Walter N Torous (1999) ‘The stochastic volatility of short-term interest
+  rates: Some international evidence.’ Journal of Finance 54(1), 233–252
+
+Bauer, Michael D, Aeimit Lakdawala, and Philippe Mueller (2022) ‘Market-based monetary
+  policy uncertainty.’ The Economic Journal 132(647), 1291–1316
+
+Bauer, Michael D, and Mikhail Chernov (2024) ‘Interest rate skewness and biased beliefs.’
+  Journal of Finance 79, 173–217
+
+Beber, Alessandro, and Michael W Brandt (2006) ‘The effects of macroeconomic news on be-
+  liefs and preferences: Evidence from the options market.’ Journal of Monetary Economics
+  53(8), 1997–2039
+
+Boehmer, Ekkehart, Charles M Jones, Xiaoyan Zhang, and Xi Zhang (2020) ‘Tracking retail
+  investor activity.’ Journal of Finance 75(5), 2249–2300
+
+Burgi, Constantin, Wanying Deng, and Karl Whelan (2025) ‘Makers and takers: The eco-
+  nomics of the kalshi prediction market.’ Working Paper
+
+Chen, Hailiang, Prabuddha De, Yu Jeffrey Hu, and Byoung-Hyoun Hwang (2014) ‘Wisdom
+ of the crowds: The value of stock opinions transmitted through social media.’ Review of
+ Financial Studies 27(5), 1367–1403
+
+Christoffersen, Peter, Kris Jacobs, and Bin Chang (2013) ‘Forecasting with option-implied
+ information.’ In ‘Handbook of Economic Forecasting,’ vol. 2 (Elsevier) pp. 581–656
+
+                                             35
+Cieslak, Anna, and Annette Vissing-Jorgensen (2021) ‘The economics of the fed put.’ Review
+  of Financial Studies 34(11), 5228–5265
+
+Clements, Michael P (2018) ‘Are macroeconomic density forecasts informative?’ Interna-
+  tional Journal of Forecasting 34(2), 197–206
+
+Darling, Donald A. (1957) ‘The Kolmogorov-Smirnov, Cramer-von Mises tests.’ The Annals
+ of Mathematical Statistics 28, 823–838
+
+Diebold, Francis X, and Robert S Mariano (1995) ‘Comparing predictive accuracy.’ Journal
+  of Business & Economic Statistics 13, 253–263
+
+Diebold, Francis X, Todd A Gunther, and Anthony S Tay (1998) ‘Evaluating density fore-
+  casts, with applications to financial risk management.’ International Economic Review
+  39, 863–883
+
+Diercks, Anthony M, and Haitham Jendoubi (2023) ‘Expectations of financial market par-
+  ticipants.’ In ‘Handbook of Economic Expectations’ (Elsevier) pp. 385–410
+
+Diercks, Anthony M, Colin Campbell, Steven A Sharpe, and Daniel Soques (2023) ‘The
+  swaps strike back: Evaluating expectations of one-year inflation’
+
+Diercks, Anthony M., Hiroatsu Tanaka, and Paul Cordova (2024) ‘Asymmetric monetary
+  policy expectations.’ SSRN Working Paper
+
+Duffee, Gregory R (2012) ‘Forecasting interest rates.’ In ‘Handbook of Economic Forecast-
+ ing,’ vol. 2 (Elsevier) pp. 105–140
+
+Eichengreen, Barry, Ganesh Viswanath-Natraj, Junxuan Wang, and Zijie Wang (2025) ‘Un-
+  der pressure? Central bank independence meets blockchain prediction markets.’ Working
+  Paper
+
+Emmons, William R, Aeimit K Lakdawala, and Christopher J Neely (2006) ‘What are the
+ odds? Option-based forecasts of FOMC target changes.’ Federal Reserve Bank of St. Louis
+ Review 88, 543–562
+
+Fan, Rongrong, Anurag Gupta, and Peter Ritchken (2003) ‘Hedging in the possible presence
+  of unspanned stochastic volatility: Evidence from swaption markets.’ Journal of Finance
+  58(5), 2219–2248
+
+
+
+
+                                           36
+Farrell, Matthew, Jeremiah Green, Russell Jame, and Stanimir Markov (2022) ‘The de-
+  mocratization of investment research and the informativeness of retail investor trading.’
+  Journal of Financial Economics 143(2), 697–720
+
+Fleckenstein, Matthias, Francis A Longstaff, and Hanno Lustig (2017) ‘Deflation risk.’ Review
+  of Financial Studies 30(8), 2719–2760
+
+Goff, Stephen, Thomas Kostka, and Federico Masera (2014) ‘How informative are the sub-
+ jective density forecasts of macroeconomists?’ Journal of Forecasting 33(8), 622–636
+
+Gürkaynak, Refet S, and Justin Wolfers (2005) ‘Macroeconomic derivatives: An initial anal-
+  ysis of market-based macro forecasts, uncertainty, and risk.’ In ‘NBER International Sem-
+  inar on Macroeconomics’ University of Chicago Press pp. 11–50
+
+Gürkaynak, Refet S, Brian Sack, and Eric T Swanson (2012) ‘Market-based measures of
+  monetary policy expectations.’ Journal of Business & Economic Statistics 30(2), 175–188
+
+Hanson, Robin, and Ryan Oprea (2009) ‘A manipulator can aid prediction market accuracy.’
+  Economica 76(302), 304–314
+
+Hilscher, Jens, Alon Raviv, and Ricardo Reis (2022) ‘Inflating away the public debt? An
+  empirical assessment.’ Review of Financial Studies 35(2), 805–852
+
+  (2024) ‘How likely is an inflation disaster?’ Working paper
+
+Jarrow, Robert A, Hao Li, and Feng Zhao (2007) ‘Interest rate caps “smile” too! but can
+  the libor market models capture the smile?’ Journal of Finance 62(1), 345–382
+
+Kelley, Eric, and Paul C Tetlock (2013) ‘How wise are crowds? insights from retail orders
+  and stock returns.’ Journal of Finance 68(3), 1229–1275
+
+  (2017) ‘Retail short selling and stock prices.’ Review of Financial Studies 30(3), 801–834
+
+Kitsul, Yuriy, and Jonathan H Wright (2013) ‘The economics of options-implied inflation
+  probability density functions.’ Journal of Financial Economics 110(3), 696–710
+
+Li, Hao, and Feng Zhao (2006) ‘Unspanned stochastic volatility: Evidence from hedging
+  interest rate derivatives.’ Journal of Finance 61(5), 2213–2230
+
+  (2009) ‘Nonparametric estimation of state-price densities implicit in interest rate cap
+  prices.’ Review of Financial Studies 22(10), 4335–4376
+
+
+
+                                             37
+Longstaff, Francis A, Pedro Santa-Clara, and Eduardo S Schwartz (2001) ‘The relative
+  valuation of caps and swaptions: Theory and empirical evidence.’ Journal of Finance
+  56(5), 2067–2109
+
+Mertens, Thomas M, and John C Williams (2021) ‘What to expect from the lower bound on
+ interest rates: Evidence from derivatives prices.’ American Economic Review 111(6), 1616–
+ 1665
+
+Miltersen, Kristian R, Klaus Sandmann, and Dieter Sondermann (1997) ‘Closed-form so-
+ lutions for term structure derivatives with lognormal interest rates.’ Journal of Finance
+ 52(1), 409–430
+
+Nakamura, Emi, and Jón Steinsson (2018) ‘High-frequency identification of monetary non-
+  neutrality: the information effect.’ Quarterly Journal of Economics 133(3), 1283–1330
+
+Rich, Robert, and Joseph Tracy (2010) ‘The relationships among expected inflation, dis-
+  agreement, and uncertainty: Evidence from matched point and density forecasts.’ Review
+  of Economics and Statistics 92(1), 200–207
+
+Rossi, Barbara, and Tatevik Sekhposyan (2019) ‘Alternative tests for correct specification of
+  conditional predictive densities.’ Journal of Econometrics 208, 638–657
+
+Snowberg, Erik, and Justin Wolfers (2010) ‘Explaining the favorite–longshot bias: Is it risk-
+  love or misperceptions?’ Journal of Political Economy 118(4), 723–746
+
+Snowberg, Erik, Justin Wolfers, and Eric Zitzewitz (2013) ‘Prediction markets for economic
+  forecasting.’ In ‘Handbook of Economic Forecasting’ (Elsevier)
+
+Swanson, Eric T (2021) ‘Measuring the effects of federal reserve forward guidance and asset
+  purchases on financial markets.’ Journal of Monetary Economics 118, 32–53
+
+Swanson, Eric T, Renxuan Wang, and Yanbin Wu (2025) ‘The effects of monetary policy
+  on macroeconomic expectations: High-frequency evidence from traded event contracts.’
+  Working Paper
+
+Wolfers, Justin, and Eric Zitzewitz (2004) ‘Prediction markets.’ Journal of Economic Per-
+ spectives 18(2), 107–126
+
+Wright, Jonathan H (2018) ‘Options-implied probability density functions for real interest
+ rates.’ International Journal of Central Banking 12, 129–149
+
+  (forthcoming) ‘Event-day options.’ Journal of Time Series Analysis
+
+                                             38
+Wright, Jonathan H, and Jon Faust (2012) ‘Forecasting inflation.’ In ‘Handbook of Economic
+ Forecasting,’ vol. 2 (Elsevier) pp. 2–56
+
+
+
+
+                                           39
+Appendix
+
+A      Midpoint of Bid-Ask Spreads
+Another approach to constructing the PDFs for the federal funds rate expectations is to take
+the midpoint of the bid-ask spread, as opposed to using the prices based on the last trade.
+Our forecast error results are shown in Figure A.1 based on this approach. One can see that
+the forecast errors spike quite a bit more, indicating some reliability issues, most likely due
+to issues surrounding the tails of the distribution. Because of these issues, we maintain focus
+on the last trade for our main results.
+
+
+
+
+    Figure A.1: Midpoint of Bid-Ask Spread: Fed Funds Rate Forecast Errors
+This figure compares the mean absolute errors from 160 days out to each FOMC for the effective federal
+funds rate since 2022. Both the last trade and bid-ask midpoints are plotted.
+
+
+
+
+                                                 40
+
