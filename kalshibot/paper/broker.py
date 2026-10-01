@@ -369,6 +369,7 @@ class PaperBroker:
         *,
         settings: Any = None,
         starting_balance: Any = None,
+        profit_sweep_pct: Any = None,
         fee_precision: Any = None,
         consumed_liquidity_ttl_s: float | None = None,
         default_gtc_expiry_s: float | None = None,
@@ -413,6 +414,9 @@ class PaperBroker:
         self.log_to_store = log_to_store
         default_start = starting_balance if starting_balance is not None else getattr(
             account, "starting_balance", 1000)
+        #: fraction of each trade's realized profit moved to ``reserved_profit`` instead of ``cash``
+        sweep_pct = profit_sweep_pct if profit_sweep_pct is not None else getattr(account, "profit_sweep_pct", 100)
+        self.profit_sweep_frac = D(sweep_pct) / D(100)
         self._lock = asyncio.Lock()
         self._poll_lock = asyncio.Lock()
         self._listeners: list[Callable[[str, Any], None]] = []
@@ -426,6 +430,8 @@ class PaperBroker:
         self.cash = starting_balance  # free cash (reservations excluded)
         self.realized_pnl = ZERO
         self.fees_paid = ZERO
+        #: profit swept out of cash (never spent on new orders); see ``_sweep_profit``
+        self.reserved_profit = ZERO
         self._open: dict[int, Order] = {}
         self._positions: dict[tuple[str, str], Position] = {}
         self._consumed: dict[tuple[str, str, Decimal], _Consumed] = {}
@@ -456,6 +462,7 @@ class PaperBroker:
         self.cash = acct["cash"]
         self.realized_pnl = acct["realized_pnl"]
         self.fees_paid = acct["fees_paid"]
+        self.reserved_profit = acct.get("reserved_profit", ZERO)
         self._peak_equity = acct["peak_equity"]
         self._max_dd_pct = acct["max_drawdown_pct"]
         self._open = {o.id: o for o in st.open_orders()}
@@ -486,8 +493,8 @@ class PaperBroker:
         """The broker's working state as stored (``account`` row + ``broker.*`` kv)."""
         held = {p.ticker for p in self._positions.values() if p.count > 0}
         out: dict[str, Any] = {
-            "account": (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self._peak_equity,
-                        self._max_dd_pct),
+            "account": (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
+                        self._peak_equity, self._max_dd_pct),
             "broker.consumed": [[t, s, str(p), str(e.qty), iso(e.ts), str(e.shown), e.grown]
                                 for (t, s, p), e in sorted(self._consumed.items())],
             "broker.cursors": {t: [iso(ts), sorted(ids)] for t, (ts, ids) in sorted(self._cursors.items())},
@@ -511,7 +518,8 @@ class PaperBroker:
                 continue
             if key == "account":
                 st.save_account(starting_balance=value[0], cash=value[1], realized_pnl=value[2], fees_paid=value[3],
-                                peak_equity=value[4], max_drawdown_pct=value[5], ts=self._now())
+                                reserved_profit=value[4], peak_equity=value[5], max_drawdown_pct=value[6],
+                                ts=self._now())
             else:
                 st.set_kv(key, value)
             written[key] = value
@@ -522,6 +530,19 @@ class PaperBroker:
         self._ids[kind] = i + 1
         return i
 
+    def _sweep_profit(self, pnl: Decimal) -> None:
+        """Move a fraction of a closed/settled trade's profit out of ``cash`` into
+        ``reserved_profit`` (``AccountSettings.profit_sweep_pct``), so it is never put back in
+        the tradeable pool. Losses are left alone - only realized gains are swept."""
+        if pnl <= 0 or self.profit_sweep_frac <= 0:
+            return
+        amount = floor_to(pnl * self.profit_sweep_frac, self.precision)
+        amount = min(amount, self.cash)
+        if amount <= 0:
+            return
+        self.cash -= amount
+        self.reserved_profit += amount
+
     def _now(self) -> datetime:
         now = self.clock()
         return now if now.tzinfo else now.replace(tzinfo=UTC)
@@ -529,7 +550,7 @@ class PaperBroker:
     # -- atomicity ----------------------------------------------------------------------
 
     def _snapshot(self) -> tuple[Any, ...]:
-        return (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid,
+        return (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
                 {k: _copy_order(o) for k, o in self._open.items()},
                 {k: dataclasses.replace(p) for k, p in self._positions.items()},
                 {k: dataclasses.replace(e) for k, e in self._consumed.items()},
@@ -538,9 +559,9 @@ class PaperBroker:
                 {k: dict(v) for k, v in self._stats.items()}, dict(self._persisted))
 
     def _restore(self, snap: tuple[Any, ...]) -> None:
-        (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self._open, self._positions,
-         self._consumed, self._cursors, self._marks, self._day_start, self._peak_equity, self._max_dd_pct,
-         self._settled, self._wins, self._stats, self._persisted) = snap
+        (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit, self._open,
+         self._positions, self._consumed, self._cursors, self._marks, self._day_start, self._peak_equity,
+         self._max_dd_pct, self._settled, self._wins, self._stats, self._persisted) = snap
 
     @contextlib.contextmanager
     def _atomic(self) -> Iterator[None]:
@@ -1233,6 +1254,7 @@ class PaperBroker:
             pos.fv_weight *= float(frac_left)
             pos.realized_pnl += pnl
             self.realized_pnl += pnl
+            self._sweep_profit(pnl)
             self._settled += 1
             self._wins += pnl > 0
             redemption = ONE * m
@@ -1852,6 +1874,7 @@ class PaperBroker:
                            opened_at=p.opened_at)
             self.cash += payout
             self.realized_pnl += pnl
+            self._sweep_profit(pnl)
             self._settled += 1
             self._wins += pnl > 0
             p.realized_pnl += pnl
@@ -1942,20 +1965,23 @@ class PaperBroker:
         reserved = self.reserved_cash
         equity = self.cash + reserved + lv
         equity_mid = self.cash + reserved + mv
-        total = equity - self.starting_balance
-        day_start = self._touch_day(equity, now)
+        #: true account value: tradeable equity plus profit already set aside (``_sweep_profit``)
+        net_worth = equity + self.reserved_profit
+        total = net_worth - self.starting_balance
+        day_start = self._touch_day(net_worth, now)
         #: each strategy's day starts at its first observation too (the snapshot job calls this)
         self._last_strategy_daily = self.strategy_daily_pnl(values)
-        peak = max(self._peak_equity, equity) if self._peak_equity is not None else equity
-        dd = (peak - equity) / peak * 100 if peak > 0 else ZERO
+        peak = max(self._peak_equity, net_worth) if self._peak_equity is not None else net_worth
+        dd = (peak - net_worth) / peak * 100 if peak > 0 else ZERO
         return AccountState(
             ts=now, starting_balance=self.starting_balance, cash=self.cash, reserved_cash=reserved,
             positions_liquidation_value=lv, positions_mid_value=mv, positions_cost_basis=cost, open_fees=ofees,
             equity=equity, equity_mid=equity_mid, realized_pnl=self.realized_pnl,
             unrealized_pnl=lv - cost - ofees, unrealized_pnl_mid=mv - cost - ofees, fees_paid=self.fees_paid,
+            reserved_profit=self.reserved_profit, net_worth=net_worth,
             total_pnl=total,
             total_return_pct=(total / self.starting_balance * 100) if self.starting_balance else ZERO,
-            todays_pnl=equity - day_start, day_start_equity=day_start,
+            todays_pnl=net_worth - day_start, day_start_equity=day_start,
             max_drawdown_pct=max(self._max_dd_pct, dd), open_positions=len(pos), open_orders=len(self._open),
             settled_trades=self._settled, wins=self._wins,
         )
@@ -2031,7 +2057,7 @@ class PaperBroker:
                 self._apply_books(books, now)
                 self._gc(now)
                 a = self.account()
-                self._peak_equity = max(self._peak_equity, a.equity) if self._peak_equity is not None else a.equity
+                self._peak_equity = max(self._peak_equity, a.net_worth) if self._peak_equity is not None else a.net_worth
                 self._max_dd_pct = a.max_drawdown_pct
                 if self.store is not None:
                     with self.store.transaction():

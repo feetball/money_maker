@@ -93,6 +93,10 @@ class Account(_Out):
     realized_pnl: float
     unrealized_pnl: float
     fees_paid: float
+    #: profit swept out of cash (AccountSettings.profit_sweep_pct); excluded from `equity`
+    reserved_profit: float
+    #: equity + reserved_profit
+    net_worth: float
     total_pnl: float
     total_return_pct: float
     todays_pnl: float

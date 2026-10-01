@@ -306,6 +306,8 @@ def settings(tmp_path: Any) -> Settings:
     s = Settings()
     s.storage.path = str(tmp_path / "test.sqlite3")
     s.engine.autostart = False
+    #: most tests assert absolute cash/equity figures; the profit-sweep feature is tested on its own
+    s.account.profit_sweep_pct = 0
     return s
 
 

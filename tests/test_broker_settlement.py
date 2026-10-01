@@ -54,7 +54,7 @@ def md(clock):
 
 @pytest.fixture
 def broker(md, clock):
-    return PaperBroker(md, Store(":memory:"), starting_balance=1000, clock=clock)
+    return PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=0, clock=clock)
 
 
 def finalize(md, ticker, result, value=None, status="finalized"):
@@ -116,6 +116,46 @@ async def test_void_pays_no_holders_one_minus_value_and_floors(broker, md):
     assert_identities(broker)
 
 
+# --------------------------------------------------------------------------- profit sweep
+
+
+async def test_profit_sweep_moves_realized_gains_out_of_cash(md, clock):
+    """``AccountSettings.profit_sweep_pct``: winning settlements/closes keep cash flat and move
+    the gain to ``reserved_profit`` instead, so it is never put back in the tradeable pool."""
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    await b.place_order(buy(A, "yes", "0.40", 10))  # cost 4.00, fee .17
+    finalize(md, A, "yes", "1.0000")  # payout 10.00, pnl 10 - 4.17 = 5.83 (profit)
+    [s] = await b.check_settlements()
+    assert s.pnl == D("5.83")
+    # the profit never reached cash: cash is as if the trade had returned exactly its cost back
+    assert b.cash == D("1000")
+    assert b.reserved_profit == D("5.83")
+    assert b.realized_pnl == D("5.83")  # still reported for analytics
+    a = b.account()
+    assert a.equity == b.cash  # tradeable equity excludes reserved_profit
+    assert a.net_worth == a.equity + a.reserved_profit == D("1000") + D("5.83")
+    assert a.total_pnl == D("5.83")  # true total P&L still reflects the swept profit
+
+
+async def test_profit_sweep_leaves_losses_in_cash(md, clock):
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    await b.place_order(buy(A, "yes", "0.40", 10))  # cost 4.00, fee .17
+    finalize(md, A, "no", "0.0000")  # payout 0, pnl -4.17 (loss)
+    [s] = await b.check_settlements()
+    assert s.pnl == D("-4.17")
+    assert b.cash == D("1000") - D("4.17")  # loss stays in cash, nothing to sweep
+    assert b.reserved_profit == ZERO
+
+
+async def test_profit_sweep_pct_partial(md, clock):
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=50, clock=clock)
+    await b.place_order(buy(A, "yes", "0.40", 10))
+    finalize(md, A, "yes", "1.0000")  # pnl 5.83; half (2.915 -> floored to .01) is swept
+    await b.check_settlements()
+    assert b.reserved_profit == D("2.91")
+    assert b.cash == D("1000") - D("4.17") + D("10.00") - D("2.91")
+
+
 async def test_determined_marks_but_waits_for_finalized(broker, md):
     await broker.place_order(buy(A, "yes", "0.40", 10))
     finalize(md, A, "yes", "1.0000", status="determined")
@@ -123,7 +163,8 @@ async def test_determined_marks_but_waits_for_finalized(broker, md):
     assert await broker.check_settlements() == []
     a = broker.account()
     assert a.positions_liquidation_value == D("10") and a.unrealized_pnl == D("10") - D("4.17")
-    early = PaperBroker(md, None, starting_balance=1000, clock=broker.clock, settle_on_determined=True)
+    early = PaperBroker(md, None, starting_balance=1000, profit_sweep_pct=0, clock=broker.clock,
+                        settle_on_determined=True)
     await early.place_order(buy(B, "yes", "0.40", 1))
     finalize(md, B, "no", "0", status="determined")
     assert [s.result for s in await early.check_settlements()] == ["no"]
@@ -180,7 +221,7 @@ async def test_equity_snapshot_and_drawdown(broker, md, clock):
 
 async def test_equity_identity_conserved_over_random_session(md, clock):
     rng = random.Random(7)
-    b = PaperBroker(md, Store(":memory:"), starting_balance=500, clock=clock)
+    b = PaperBroker(md, Store(":memory:"), starting_balance=500, profit_sweep_pct=0, clock=clock)
     md.set_series("KXTEST", "quadratic_with_maker_fees", 1)
     for step in range(120):
         t = rng.choice([A, B])

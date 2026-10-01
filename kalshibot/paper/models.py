@@ -409,6 +409,11 @@ class AccountState:
     unrealized_pnl: Decimal
     unrealized_pnl_mid: Decimal
     fees_paid: Decimal
+    #: profit swept out of ``cash``/``equity`` (``AccountSettings.profit_sweep_pct``); never spent
+    #: on new orders and excluded from the equity used for position sizing / risk limits.
+    reserved_profit: Decimal
+    #: equity + reserved_profit: true account value including profit set aside.
+    net_worth: Decimal
     total_pnl: Decimal
     total_return_pct: Decimal
     todays_pnl: Decimal
@@ -435,6 +440,8 @@ class AccountState:
             "realized_pnl": f4(self.realized_pnl),
             "unrealized_pnl": f4(self.unrealized_pnl),
             "fees_paid": f4(self.fees_paid),
+            "reserved_profit": f4(self.reserved_profit),
+            "net_worth": f4(self.net_worth),
             "total_pnl": f4(self.total_pnl),
             "total_return_pct": f4(self.total_return_pct),
             "todays_pnl": f4(self.todays_pnl),

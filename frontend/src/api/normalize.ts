@@ -233,6 +233,7 @@ export function normAccount(v: unknown): Account {
   const midRaw = numOrNull(o.positions_mid_value);
   const mid = midRaw ?? liq;
   const equity = numOrNull(o.equity) ?? cash + reserved + liq;
+  const reservedProfit = num(o.reserved_profit);
   return {
     starting_balance: num(o.starting_balance),
     cash,
@@ -244,6 +245,8 @@ export function normAccount(v: unknown): Account {
     realized_pnl: num(o.realized_pnl),
     unrealized_pnl: num(o.unrealized_pnl),
     fees_paid: num(o.fees_paid),
+    reserved_profit: reservedProfit,
+    net_worth: numOrNull(o.net_worth) ?? equity + reservedProfit,
     total_pnl: num(o.total_pnl),
     total_return_pct: num(o.total_return_pct),
     todays_pnl: num(o.todays_pnl),
@@ -268,6 +271,8 @@ const ACCOUNT_NUM_KEYS = [
   "realized_pnl",
   "unrealized_pnl",
   "fees_paid",
+  "reserved_profit",
+  "net_worth",
   "total_pnl",
   "total_return_pct",
   "todays_pnl",

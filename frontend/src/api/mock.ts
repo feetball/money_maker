@@ -1042,6 +1042,8 @@ function accountOf(st: MockState): Account {
     realized_pnl: q4(realized),
     unrealized_pnl: q4(unrealized),
     fees_paid: q4(st.feesPaid),
+    reserved_profit: 0,
+    net_worth: q4(equity),
     total_pnl: q4(realized + unrealized),
     total_return_pct: q4(((realized + unrealized) / st.startingBalance) * 100),
     todays_pnl: q4(startPt ? equity - startPt.equity : 0),

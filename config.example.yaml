@@ -13,7 +13,8 @@ kalshi:
   timeout: 15            # seconds per HTTP request
 
 account:
-  starting_balance: 1000 # paper cash at start / after reset
+  starting_balance: 1000  # paper cash at start / after reset
+  profit_sweep_pct: 100   # % of each trade's profit set aside as reserved_profit instead of staying tradeable
 
 engine:
   autostart: true        # start the trading loop with `kalshibot serve`

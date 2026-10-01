@@ -62,7 +62,7 @@ def md(clock: ManualClock) -> StaticMarketData:
 
 @pytest.fixture
 def broker(md: StaticMarketData, clock: ManualClock) -> PaperBroker:
-    return PaperBroker(md, Store(":memory:"), starting_balance=1000, clock=clock)
+    return PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=0, clock=clock)
 
 
 # --------------------------------------------------------------------------- F1 / F8: consumed liquidity
@@ -260,7 +260,7 @@ class FlakyStore(Store):
 async def test_f3_failed_settlement_commit_rolls_memory_back(tmp_path, md, clock):
     path = tmp_path / "flaky.sqlite3"
     store = FlakyStore(path)
-    b = PaperBroker(md, store, starting_balance=1000, clock=clock)
+    b = PaperBroker(md, store, starting_balance=1000, profit_sweep_pct=0, clock=clock)
     md.set_book(A, yes_bids=[("0.40", 50)], no_bids=[("0.58", 100)])
     await b.place_order(buy(A, "yes", "0.42", 100))
     assert b.cash == D("956.29")  # 1000 - 42 - fee 1.71
@@ -273,7 +273,7 @@ async def test_f3_failed_settlement_commit_rolls_memory_back(tmp_path, md, clock
     assert [s.count for s in await b.check_settlements()] == [100]
     assert b.cash == D("1056.29") and b.realized_pnl == D("56.29")
     store.close()
-    b2 = PaperBroker(md, Store(path), starting_balance=1000, clock=clock)
+    b2 = PaperBroker(md, Store(path), starting_balance=1000, profit_sweep_pct=0, clock=clock)
     assert b2.positions() == [] and b2.cash == D("1056.29") and b2.realized_pnl == D("56.29")
     assert await b2.check_settlements() == []  # never paid twice
 

@@ -118,6 +118,10 @@ class KalshiSettings(_Section):
 
 class AccountSettings(_Section):
     starting_balance: NonNegMoney = D(1000)
+    #: % of each closed/settled trade's profit moved out of ``cash`` into ``reserved_profit`` (never
+    #: spent on new orders, not part of sizing/risk equity); 100 = keep all profit separate, 0 = old
+    #: behaviour (profit stays in the tradeable pool). Losses are never swept.
+    profit_sweep_pct: float = Field(100, ge=0, le=100)
 
 
 class EngineSettings(_Section):

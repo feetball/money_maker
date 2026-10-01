@@ -89,6 +89,12 @@ function Kpis({ a }: { a: Account }) {
         }
       />
       <KpiTile label="Cash" value={fmtUsd(a.cash)} sub={<>reserved for orders {fmtUsd(a.reserved_cash)}</>} />
+      <KpiTile
+        label="Reserved profit"
+        value={fmtUsd(a.reserved_profit)}
+        title="Profit from closed/settled trades kept out of the tradeable pool (not used for new orders or position sizing)."
+        sub={<>net worth {fmtUsd(a.net_worth)}</>}
+      />
       <KpiTile label="Fees paid" value={fmtUsd(a.fees_paid)} sub="Kalshi fee model" />
       <KpiTile
         label="Max drawdown"

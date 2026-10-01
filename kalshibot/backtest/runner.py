@@ -313,7 +313,8 @@ class _Replay:
         self.clock = ManualClock(_dt(start))
         self.md = ReplayMarketData(ds, self.clock, book_size=opts["book_size"])
         self.broker = _QuietBroker(self.md, None, settings=settings, starting_balance=starting_balance,
-                                   clock=self.clock, log_to_store=False, max_trade_polls_per_pass=0)
+                                   profit_sweep_pct=0, clock=self.clock, log_to_store=False,
+                                   max_trade_polls_per_pass=0)
         self.risk: RiskManager | None = _QuietRisk(settings, store=None, clock=self.clock) if opts["risk"] else None
         if self.risk is not None:  # the strategy's own allocation / daily loss limit, as live
             self.risk.set_strategy_limits(strategy_limits(settings, {self.name: type(strategy)}))

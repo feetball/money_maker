@@ -100,6 +100,10 @@ export interface Account {
   realized_pnl: number;
   unrealized_pnl: number;
   fees_paid: number;
+  /** Profit moved out of `cash`/`equity` (never spent on new orders); see account settings. */
+  reserved_profit: number;
+  /** equity + reserved_profit: true account value including profit set aside. */
+  net_worth: number;
   total_pnl: number;
   /** Percentage points. */
   total_return_pct: number;
