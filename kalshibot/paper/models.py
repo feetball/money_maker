@@ -414,6 +414,9 @@ class AccountState:
     reserved_profit: Decimal
     #: equity + reserved_profit: true account value including profit set aside.
     net_worth: Decimal
+    #: whether/how much of each trade's profit is swept into reserved_profit (``PATCH /api/account``)
+    profit_sweep_enabled: bool
+    profit_sweep_pct: Decimal
     total_pnl: Decimal
     total_return_pct: Decimal
     todays_pnl: Decimal
@@ -442,6 +445,8 @@ class AccountState:
             "fees_paid": f4(self.fees_paid),
             "reserved_profit": f4(self.reserved_profit),
             "net_worth": f4(self.net_worth),
+            "profit_sweep_enabled": self.profit_sweep_enabled,
+            "profit_sweep_pct": f4(self.profit_sweep_pct),
             "total_pnl": f4(self.total_pnl),
             "total_return_pct": f4(self.total_return_pct),
             "todays_pnl": f4(self.todays_pnl),

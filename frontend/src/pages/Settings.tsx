@@ -395,6 +395,118 @@ function AccountReset() {
   );
 }
 
+function ProfitSweep() {
+  const { data: account, poll: accountPoll } = useLiveAccount();
+  const { busy, run } = useAction();
+  const [pct, setPct] = useState("");
+  const enabled = account?.profit_sweep_enabled ?? true;
+  const currentPct = account?.profit_sweep_pct;
+  const pctValue = pct.trim() === "" ? currentPct : Number(pct);
+  const pctInvalid = pctValue === undefined || !Number.isFinite(pctValue) || pctValue < 0 || pctValue > 100;
+  const pctDirty = pct.trim() !== "" && Number(pct) !== currentPct;
+
+  const toggle = async (next: boolean) => {
+    const r = await run("toggle", () => api.patchAccount({ profit_sweep_enabled: next }), {
+      success: `Profit sweep ${next ? "enabled" : "disabled"}`,
+      error: "Couldn't update the profit sweep",
+    });
+    if (r) accountPoll.mutate(() => r);
+  };
+
+  const savePct = async () => {
+    if (pctInvalid || pctValue === undefined) return;
+    const r = await run("pct", () => api.patchAccount({ profit_sweep_pct: pctValue }), {
+      success: `Profit sweep set to ${pctValue}%`,
+      error: "Couldn't update the profit sweep",
+    });
+    if (r) {
+      accountPoll.mutate(() => r);
+      setPct("");
+    }
+  };
+
+  const [withdraw, setWithdraw] = useState("");
+  const reserved = account?.reserved_profit ?? 0;
+  const withdrawValue = withdraw.trim() === "" ? reserved : Number(withdraw);
+  const withdrawInvalid = !Number.isFinite(withdrawValue) || withdrawValue < 0 || withdrawValue > reserved;
+
+  const doWithdraw = async () => {
+    if (withdrawInvalid || reserved <= 0) return;
+    const r = await run(
+      "withdraw",
+      () => api.withdrawProfit(withdraw.trim() === "" ? {} : { amount: withdrawValue }),
+      { success: `${fmtUsd(withdrawValue)} moved from reserved profit to cash`, error: "Couldn't withdraw reserved profit" },
+    );
+    if (r) {
+      accountPoll.mutate(() => r);
+      setWithdraw("");
+    }
+  };
+
+  return (
+    <div className="reset">
+      <p>
+        Winning trades set aside <strong className="num">{fmtUsd(reserved)}</strong> reserved profit, kept out of the tradeable pool
+        {account && (
+          <>
+            {" "}
+            · net worth <span className="num">{fmtUsd(account.net_worth)}</span>
+          </>
+        )}
+        .
+      </p>
+      <div className="form-row">
+        <Switch checked={enabled} onChange={toggle} label="Sweep profit out of cash" showLabel disabled={busy !== null} />
+      </div>
+      <div className="form-row">
+        <Field label="Sweep %" htmlFor="sweep-pct" hint="% of each winning trade's profit moved to reserved profit." error={pct && pctInvalid ? "Enter 0-100" : null}>
+          <input
+            id="sweep-pct"
+            className="input num-input"
+            type="number"
+            min={0}
+            max={100}
+            step={5}
+            inputMode="decimal"
+            placeholder={currentPct !== undefined ? String(currentPct) : "100"}
+            value={pct}
+            {...fieldAria("sweep-pct", pct && pctInvalid ? "Enter 0-100" : null)}
+            onChange={(e) => setPct(e.target.value)}
+          />
+        </Field>
+        <button className="btn" onClick={savePct} disabled={!pctDirty || pctInvalid || busy !== null} aria-busy={busy === "pct"}>
+          Save %
+        </button>
+      </div>
+      <div className="form-row">
+        <Field
+          label="Move back to cash ($)"
+          htmlFor="withdraw-amount"
+          hint={`Leave empty to withdraw all ${fmtUsd(reserved)}.`}
+          error={withdraw && withdrawInvalid ? `Enter 0-${reserved}` : null}
+        >
+          <input
+            id="withdraw-amount"
+            className="input num-input"
+            type="number"
+            min={0}
+            max={reserved}
+            step={1}
+            inputMode="decimal"
+            placeholder={fmtUsd(reserved)}
+            value={withdraw}
+            {...fieldAria("withdraw-amount", withdraw && withdrawInvalid ? `Enter 0-${reserved}` : null)}
+            onChange={(e) => setWithdraw(e.target.value)}
+          />
+        </Field>
+        <button className="btn" onClick={doWithdraw} disabled={reserved <= 0 || withdrawInvalid || busy !== null} aria-busy={busy === "withdraw"}>
+          <Icon name="check" /> Withdraw to cash
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Preferences() {
   const stream = useStreamInfo();
   return (
@@ -442,6 +554,9 @@ export function Settings() {
       </Card>
       <Card title="Current utilization">
         <PollView<RiskResponse> poll={poll}>{(r) => <Utilization risk={r} />}</PollView>
+      </Card>
+      <Card title="Profit sweep" subtitle="Keep winning trades' profit out of the tradeable pool, or bring some back in">
+        <ProfitSweep />
       </Card>
       <div className="grid grid-2">
         <Card title="Reset paper account" className="danger-zone">

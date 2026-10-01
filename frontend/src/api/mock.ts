@@ -478,6 +478,11 @@ interface MockState {
   equity: EquityPoint[];
   realizedExtra: number;
   feesPaid: number;
+  reservedProfit: number;
+  profitSweepEnabled: boolean;
+  profitSweepPct: number;
+  /** Manual withdrawals from reserved_profit back to cash (mock doesn't simulate sweeping on settlement). */
+  cashAdjustment: number;
   risk: Record<string, number>;
   ordersTimes: number[];
   backtests: MBacktest[];
@@ -550,6 +555,10 @@ function buildState(now: number, startingBalance = 1000, empty = false): MockSta
     equity: [],
     realizedExtra: 0,
     feesPaid: 0,
+    reservedProfit: 0,
+    profitSweepEnabled: true,
+    profitSweepPct: 100,
+    cashAdjustment: 0,
     risk: {
       max_position_cost_per_market: 50,
       max_exposure_per_event: 100,
@@ -1020,7 +1029,7 @@ function accountOf(st: MockState): Account {
   const realized = st.settlements.reduce((s, x) => s + x.pnl, 0) + st.realizedExtra;
   const unrealized = liq - cost;
   const reserved = reservedCash(st);
-  const cash = st.startingBalance + realized - cost - reserved;
+  const cash = st.startingBalance + realized - cost - reserved + st.cashAdjustment;
   const equity = cash + reserved + liq;
   const wins = st.settlements.filter((s) => s.pnl > 0).length;
   const dayStart = Math.floor(Date.now() / DAY) * DAY;
@@ -1042,8 +1051,10 @@ function accountOf(st: MockState): Account {
     realized_pnl: q4(realized),
     unrealized_pnl: q4(unrealized),
     fees_paid: q4(st.feesPaid),
-    reserved_profit: 0,
-    net_worth: q4(equity),
+    reserved_profit: q4(st.reservedProfit),
+    net_worth: q4(equity + st.reservedProfit),
+    profit_sweep_enabled: st.profitSweepEnabled,
+    profit_sweep_pct: st.profitSweepPct,
     total_pnl: q4(realized + unrealized),
     total_return_pct: q4(((realized + unrealized) / st.startingBalance) * 100),
     todays_pnl: q4(startPt ? equity - startPt.equity : 0),
@@ -1940,6 +1951,33 @@ export async function mockRequest(method: string, rawPath: string, body: unknown
     return ok(statusOf(st));
   }
   if (method === "GET" && path === "/account") return ok(accountOf(st));
+  if (method === "PATCH" && path === "/account") {
+    if (b.profit_sweep_enabled === undefined && b.profit_sweep_pct === undefined) return err(422, "no fields to update");
+    if (b.profit_sweep_pct !== undefined) {
+      const pct = Number(b.profit_sweep_pct);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) return err(422, "profit_sweep_pct: must be between 0 and 100");
+      st.profitSweepPct = pct;
+    }
+    if (b.profit_sweep_enabled !== undefined) st.profitSweepEnabled = Boolean(b.profit_sweep_enabled);
+    return ok(accountOf(st));
+  }
+  if (method === "POST" && path === "/account/withdraw-profit") {
+    if (b.amount !== undefined && b.pct !== undefined) return err(422, "give amount or pct, not both");
+    let moved = st.reservedProfit;
+    if (b.pct !== undefined) {
+      const pct = Number(b.pct);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) return err(422, "pct: must be between 0 and 100");
+      moved = st.reservedProfit * (pct / 100);
+    } else if (b.amount !== undefined) {
+      const amt = Number(b.amount);
+      if (!Number.isFinite(amt) || amt < 0) return err(422, "amount: must be >= 0");
+      moved = amt;
+    }
+    moved = Math.min(moved, st.reservedProfit);
+    st.reservedProfit = q4(st.reservedProfit - moved);
+    st.cashAdjustment += moved;
+    return ok(accountOf(st));
+  }
   if (method === "POST" && path === "/account/reset") {
     const sb = b.starting_balance === undefined ? st.startingBalance : Number(b.starting_balance);
     if (!Number.isFinite(sb) || sb <= 0) return err(422, "starting_balance: must be a positive number");

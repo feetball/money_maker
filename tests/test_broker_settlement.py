@@ -156,6 +156,48 @@ async def test_profit_sweep_pct_partial(md, clock):
     assert b.cash == D("1000") - D("4.17") + D("10.00") - D("2.91")
 
 
+async def test_profit_sweep_can_be_turned_off_live(md, clock):
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    await b.set_profit_sweep(enabled=False)
+    await b.place_order(buy(A, "yes", "0.40", 10))
+    finalize(md, A, "yes", "1.0000")
+    await b.check_settlements()
+    assert b.reserved_profit == ZERO and b.cash == D("1000") + D("5.83")  # old pooled behaviour
+    await b.set_profit_sweep(enabled=True, pct=25)
+    assert b.profit_sweep_enabled is True and b.profit_sweep_pct == D(25)
+    with pytest.raises(ValueError):
+        await b.set_profit_sweep(pct=101)
+
+
+async def test_profit_sweep_settings_persist_across_restart(tmp_path, md, clock):
+    path = tmp_path / "sweep.sqlite3"
+    st = Store(path)
+    b1 = PaperBroker(md, st, starting_balance=1000, clock=clock)
+    await b1.set_profit_sweep(enabled=False, pct=30)
+    st.close()
+    b2 = PaperBroker(md, Store(path), starting_balance=1000, clock=clock)
+    assert b2.profit_sweep_enabled is False and b2.profit_sweep_pct == D(30)
+
+
+async def test_withdraw_reserved_profit_moves_money_back_to_cash(md, clock):
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    await b.place_order(buy(A, "yes", "0.40", 10))
+    finalize(md, A, "yes", "1.0000")
+    await b.check_settlements()
+    assert b.reserved_profit == D("5.83") and b.cash == D("1000")
+    moved = await b.withdraw_reserved_profit(pct=50)
+    assert moved == D("2.91") and b.reserved_profit == D("2.92") and b.cash == D("1000") + D("2.91")
+    moved2 = await b.withdraw_reserved_profit()  # no args: withdraws the rest
+    assert moved2 == D("2.92") and b.reserved_profit == ZERO and b.cash == D("1000") + D("5.83")
+    assert await b.withdraw_reserved_profit() == ZERO  # nothing left
+    with pytest.raises(ValueError):
+        await b.withdraw_reserved_profit(amount=1, pct=1)
+    with pytest.raises(ValueError):
+        await b.withdraw_reserved_profit(amount=-1)
+    with pytest.raises(ValueError):
+        await b.withdraw_reserved_profit(pct=101)
+
+
 async def test_determined_marks_but_waits_for_finalized(broker, md):
     await broker.place_order(buy(A, "yes", "0.40", 10))
     finalize(md, A, "yes", "1.0000", status="determined")

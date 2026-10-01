@@ -37,7 +37,9 @@ import {
 import {
   STREAM_EVENT_TYPES,
   type Account,
+  type AccountPatch,
   type AccountResetRequest,
+  type AccountWithdrawProfitRequest,
   type AnalyticsResponse,
   type BacktestCreateRequest,
   type BacktestCreateResponse,
@@ -305,6 +307,9 @@ export const api = {
     const body: AccountResetRequest = startingBalance === undefined ? {} : { starting_balance: startingBalance };
     return request("POST", "/account/reset", body).then(normAccount);
   },
+  patchAccount: (patch: AccountPatch): Promise<Account> => request("PATCH", "/account", patch).then(normAccount),
+  withdrawProfit: (body: AccountWithdrawProfitRequest = {}): Promise<Account> =>
+    request("POST", "/account/withdraw-profit", body).then(normAccount),
   equity: (range: EquityRange, o?: ReqOpts): Promise<EquityPoint[]> =>
     request("GET", `/equity${qs({ range })}`, undefined, o?.signal).then(normEquity),
 

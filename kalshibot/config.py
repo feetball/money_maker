@@ -120,8 +120,12 @@ class AccountSettings(_Section):
     starting_balance: NonNegMoney = D(1000)
     #: % of each closed/settled trade's profit moved out of ``cash`` into ``reserved_profit`` (never
     #: spent on new orders, not part of sizing/risk equity); 100 = keep all profit separate, 0 = old
-    #: behaviour (profit stays in the tradeable pool). Losses are never swept.
+    #: behaviour (profit stays in the tradeable pool). Losses are never swept. Live-adjustable via
+    #: ``PATCH /api/account``; once an account exists the stored value wins over this default.
     profit_sweep_pct: float = Field(100, ge=0, le=100)
+    #: on/off switch for the sweep, independent of ``profit_sweep_pct`` (so turning it off keeps the
+    #: configured %). Live-adjustable via ``PATCH /api/account``.
+    profit_sweep_enabled: bool = True
 
 
 class EngineSettings(_Section):

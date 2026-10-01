@@ -247,6 +247,8 @@ export function normAccount(v: unknown): Account {
     fees_paid: num(o.fees_paid),
     reserved_profit: reservedProfit,
     net_worth: numOrNull(o.net_worth) ?? equity + reservedProfit,
+    profit_sweep_enabled: bool(o.profit_sweep_enabled, true),
+    profit_sweep_pct: num(o.profit_sweep_pct, 100),
     total_pnl: num(o.total_pnl),
     total_return_pct: num(o.total_return_pct),
     todays_pnl: num(o.todays_pnl),
@@ -273,6 +275,7 @@ const ACCOUNT_NUM_KEYS = [
   "fees_paid",
   "reserved_profit",
   "net_worth",
+  "profit_sweep_pct",
   "total_pnl",
   "total_return_pct",
   "todays_pnl",
@@ -298,6 +301,7 @@ export function normAccountPartial(v: unknown): Partial<Account> {
     const w = fraction(o.win_rate);
     if (w !== null || o.win_rate === null) out.win_rate = w;
   }
+  if ("profit_sweep_enabled" in o) out.profit_sweep_enabled = bool(o.profit_sweep_enabled, true);
   const t = ts(o.ts);
   if (t) out.ts = t;
   return out;
@@ -306,6 +310,7 @@ export function normAccountPartial(v: unknown): Partial<Account> {
 /** A full Account when `p` carries every §12 key (so it can stand in for a poll). */
 export function completeAccount(p: Partial<Account>): Account | null {
   for (const k of ACCOUNT_NUM_KEYS) if (p[k] === undefined) return null;
+  if (p.profit_sweep_enabled === undefined) return null;
   return { ...(p as Account), win_rate: p.win_rate ?? null };
 }
 

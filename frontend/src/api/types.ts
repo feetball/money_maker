@@ -104,6 +104,10 @@ export interface Account {
   reserved_profit: number;
   /** equity + reserved_profit: true account value including profit set aside. */
   net_worth: number;
+  /** Whether winning trades' profit is swept into reserved_profit instead of staying tradeable. */
+  profit_sweep_enabled: boolean;
+  /** % of each winning trade's profit swept when `profit_sweep_enabled` is true. */
+  profit_sweep_pct: number;
   total_pnl: number;
   /** Percentage points. */
   total_return_pct: number;
@@ -121,6 +125,18 @@ export interface Account {
 
 export interface AccountResetRequest {
   starting_balance?: number;
+}
+
+/** PATCH /api/account: turn the profit sweep on/off and/or change its %. */
+export interface AccountPatch {
+  profit_sweep_enabled?: boolean;
+  profit_sweep_pct?: number;
+}
+
+/** POST /api/account/withdraw-profit: move money from reserved_profit back into cash. Give amount ($) or pct (%), not both; neither withdraws it all. */
+export interface AccountWithdrawProfitRequest {
+  amount?: number;
+  pct?: number;
 }
 
 // ---------------------------------------------------------------------------

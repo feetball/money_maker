@@ -25,7 +25,8 @@ A, B, C = "KXTEST-26SEP27-A", "KXTEST-26SEP27-B", "KXTEST-26SEP27-C"
 
 STATUS_ENGINE = {"running", "started_at", "last_tick_at", "tick_count", "universe_size", "last_error", "kill_switch"}
 ACCOUNT = {"starting_balance", "cash", "reserved_cash", "positions_liquidation_value", "positions_mid_value",
-           "equity", "equity_mid", "realized_pnl", "unrealized_pnl", "fees_paid", "total_pnl", "total_return_pct",
+           "equity", "equity_mid", "realized_pnl", "unrealized_pnl", "fees_paid", "reserved_profit", "net_worth",
+           "profit_sweep_enabled", "profit_sweep_pct", "total_pnl", "total_return_pct",
            "todays_pnl", "max_drawdown_pct", "open_positions", "open_orders", "settled_trades", "win_rate"}
 EQUITY = {"ts", "equity", "equity_mid", "cash", "realized_pnl", "unrealized_pnl"}
 POSITION = {"ticker", "title", "event_ticker", "side", "count", "avg_price", "cost_basis", "mark_price",
@@ -333,6 +334,35 @@ def test_account_reset_stops_engine_and_wipes(api: Any) -> None:
     assert c.get("/api/orders?status=all").json() == [] and c.get("/api/signals").json() == []
     assert c.post("/api/account/reset", json={"starting_balance": -5}).status_code == 422
     assert c.post("/api/account/reset").json()["starting_balance"] == 250  # body optional
+
+
+def test_account_profit_sweep_toggle_and_withdraw(api: Any) -> None:
+    c, svc, _ = api
+    d = c.get("/api/account").json()
+    assert d["profit_sweep_enabled"] is True and d["profit_sweep_pct"] == 0  # test settings: sweep off by default
+
+    r = c.patch("/api/account", json={"profit_sweep_enabled": False})
+    assert r.status_code == 200 and r.json()["profit_sweep_enabled"] is False and r.json()["profit_sweep_pct"] == 0
+    r = c.patch("/api/account", json={"profit_sweep_pct": 50})
+    assert r.status_code == 200 and r.json()["profit_sweep_pct"] == 50 and r.json()["profit_sweep_enabled"] is False
+    assert c.patch("/api/account", json={"profit_sweep_pct": 150}).status_code == 422
+    assert c.patch("/api/account", json={}).status_code == 422
+    # persisted on the broker's account row (survives a reload, like starting_balance/cash)
+    assert svc.broker.store.get_account()["profit_sweep_enabled"] is False
+
+    c.patch("/api/account", json={"profit_sweep_enabled": True, "profit_sweep_pct": 100})
+    svc.broker.reserved_profit = D("10")  # simulate profit already swept aside by earlier trades
+    cash_before = c.get("/api/account").json()["cash"]
+    r = c.post("/api/account/withdraw-profit", json={"pct": 50})
+    assert r.status_code == 200
+    d2 = r.json()
+    assert d2["reserved_profit"] == 5.0
+    assert d2["cash"] == round(cash_before + 5, 2)
+    r2 = c.post("/api/account/withdraw-profit")  # no body: withdraws the rest
+    assert r2.json()["reserved_profit"] == 0
+    assert c.post("/api/account/withdraw-profit", json={"amount": 1, "pct": 1}).status_code == 422
+    assert c.post("/api/account/withdraw-profit", json={"amount": -1}).status_code == 422
+    assert c.post("/api/account/withdraw-profit", json={"pct": 150}).status_code == 422
 
 
 def test_unknown_api_path_is_json_404(api: Any) -> None:

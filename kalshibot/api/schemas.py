@@ -13,7 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "Account",
+    "AccountPatch",
     "AccountResetRequest",
+    "AccountWithdrawProfitRequest",
     "AnalyticsResponse",
     "AnalyticsStats",
     "BacktestCreateRequest",
@@ -97,6 +99,8 @@ class Account(_Out):
     reserved_profit: float
     #: equity + reserved_profit
     net_worth: float
+    profit_sweep_enabled: bool
+    profit_sweep_pct: float
     total_pnl: float
     total_return_pct: float
     todays_pnl: float
@@ -109,6 +113,23 @@ class Account(_Out):
 
 class AccountResetRequest(_In):
     starting_balance: float | None = Field(default=None, gt=0, le=1e9)
+
+
+class AccountPatch(_In):
+    """``PATCH /api/account``: turn the profit sweep on/off and/or change its %%."""
+
+    profit_sweep_enabled: bool | None = None
+    profit_sweep_pct: float | None = Field(default=None, ge=0, le=100)
+
+
+class AccountWithdrawProfitRequest(_In):
+    """``POST /api/account/withdraw-profit``: move money from reserved_profit back into cash.
+
+    Give ``amount`` ($) or ``pct`` (%% of reserved_profit), not both; neither withdraws it all.
+    """
+
+    amount: float | None = Field(default=None, ge=0)
+    pct: float | None = Field(default=None, ge=0, le=100)
 
 
 class EquityPoint(_Out):

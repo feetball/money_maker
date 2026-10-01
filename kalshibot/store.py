@@ -60,7 +60,7 @@ from kalshibot.paper.models import Fill, Order, Position, Settlement, iso, parse
 
 __all__ = ["MIGRATIONS", "SCHEMA_VERSION", "ProcessLock", "SchemaVersionError", "Store", "StoreLockedError"]
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -235,6 +235,11 @@ MIGRATIONS: dict[int, list[str]] = {
     2: [
         # profit kept separate from the tradeable cash pool (AccountSettings.profit_sweep_pct)
         """ALTER TABLE account ADD COLUMN reserved_profit TEXT NOT NULL DEFAULT '0'""",
+    ],
+    3: [
+        # live on/off switch + % for the profit sweep, and manual withdrawals back to cash
+        """ALTER TABLE account ADD COLUMN profit_sweep_enabled TEXT NOT NULL DEFAULT '1'""",
+        """ALTER TABLE account ADD COLUMN profit_sweep_pct TEXT NOT NULL DEFAULT '100'""",
     ],
 }
 
@@ -602,18 +607,21 @@ class Store:
             "starting_balance": D(r["starting_balance"]), "cash": D(r["cash"]),
             "realized_pnl": _dz(r["realized_pnl"]), "fees_paid": _dz(r["fees_paid"]),
             "reserved_profit": _dz(r["reserved_profit"]),
+            "profit_sweep_enabled": bool(int(r["profit_sweep_enabled"])), "profit_sweep_pct": D(r["profit_sweep_pct"]),
             "peak_equity": _d(r["peak_equity"]), "max_drawdown_pct": _dz(r["max_drawdown_pct"]),
             "created_at": parse_iso(r["created_at"]), "updated_at": parse_iso(r["updated_at"]),
         }
 
     def save_account(self, *, starting_balance: Decimal, cash: Decimal, realized_pnl: Decimal = ZERO,
                      fees_paid: Decimal = ZERO, reserved_profit: Decimal = ZERO,
+                     profit_sweep_enabled: bool = True, profit_sweep_pct: Decimal = D(100),
                      peak_equity: Decimal | None = None,
                      max_drawdown_pct: Decimal = ZERO, ts: datetime | None = None) -> None:
         now = iso(ts or _now())
         row = {"id": 1, "starting_balance": _s(starting_balance), "cash": _s(cash),
                "realized_pnl": _s(realized_pnl), "fees_paid": _s(fees_paid),
                "reserved_profit": _s(reserved_profit),
+               "profit_sweep_enabled": "1" if profit_sweep_enabled else "0", "profit_sweep_pct": _s(profit_sweep_pct),
                "peak_equity": _s(peak_equity), "max_drawdown_pct": _s(max_drawdown_pct),
                "created_at": now, "updated_at": now}
         sql = _upsert_sql("account", row, ["id"]).replace(",created_at=excluded.created_at", "")

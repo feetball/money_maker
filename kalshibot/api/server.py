@@ -55,7 +55,9 @@ from kalshibot.analytics import (
 )
 from kalshibot.api.schemas import (
     Account,
+    AccountPatch,
     AccountResetRequest,
+    AccountWithdrawProfitRequest,
     AnalyticsResponse,
     BacktestCreateRequest,
     BacktestCreateResponse,
@@ -526,6 +528,32 @@ def create_app(
         svc.engine.log("warning", "account", f"paper account reset to ${acct.starting_balance} (engine stopped)")
         svc.engine.publish_account()
         return acct.to_json()
+
+    @app.patch("/api/account", response_model=Account)
+    async def patch_account(request: Request, body: AccountPatch) -> dict[str, Any]:
+        svc = _svc(request)
+        if body.profit_sweep_enabled is None and body.profit_sweep_pct is None:
+            raise HTTPException(422, "no fields to update")
+        try:
+            acct = await svc.broker.set_profit_sweep(enabled=body.profit_sweep_enabled, pct=body.profit_sweep_pct)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        svc.engine.publish_account()
+        return acct.to_json()
+
+    @app.post("/api/account/withdraw-profit", response_model=Account)
+    async def withdraw_profit(request: Request, body: Annotated[AccountWithdrawProfitRequest | None, Body()] = None
+                              ) -> dict[str, Any]:
+        svc = _svc(request)
+        if body is not None and body.amount is not None and body.pct is not None:
+            raise HTTPException(422, "give amount or pct, not both")
+        try:
+            await svc.broker.withdraw_reserved_profit(amount=body.amount if body else None,
+                                                       pct=body.pct if body else None)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        svc.engine.publish_account()
+        return svc.broker.account().to_json()
 
     @app.get("/api/equity", response_model=list[EquityPoint])
     async def get_equity(request: Request, range: Literal["1d", "7d", "30d", "all"] = "all"

@@ -370,6 +370,7 @@ class PaperBroker:
         settings: Any = None,
         starting_balance: Any = None,
         profit_sweep_pct: Any = None,
+        profit_sweep_enabled: Any = None,
         fee_precision: Any = None,
         consumed_liquidity_ttl_s: float | None = None,
         default_gtc_expiry_s: float | None = None,
@@ -415,8 +416,12 @@ class PaperBroker:
         default_start = starting_balance if starting_balance is not None else getattr(
             account, "starting_balance", 1000)
         #: fraction of each trade's realized profit moved to ``reserved_profit`` instead of ``cash``
-        sweep_pct = profit_sweep_pct if profit_sweep_pct is not None else getattr(account, "profit_sweep_pct", 100)
-        self.profit_sweep_frac = D(sweep_pct) / D(100)
+        #: (defaults below are only used until an account row exists; after that the stored value wins,
+        #: same as ``starting_balance``/``cash`` - see ``_load``)
+        self._default_sweep_pct = D(profit_sweep_pct if profit_sweep_pct is not None
+                                    else getattr(account, "profit_sweep_pct", 100))
+        self._default_sweep_enabled = bool(profit_sweep_enabled if profit_sweep_enabled is not None
+                                           else getattr(account, "profit_sweep_enabled", True))
         self._lock = asyncio.Lock()
         self._poll_lock = asyncio.Lock()
         self._listeners: list[Callable[[str, Any], None]] = []
@@ -432,6 +437,8 @@ class PaperBroker:
         self.fees_paid = ZERO
         #: profit swept out of cash (never spent on new orders); see ``_sweep_profit``
         self.reserved_profit = ZERO
+        self.profit_sweep_enabled = self._default_sweep_enabled
+        self.profit_sweep_pct = self._default_sweep_pct
         self._open: dict[int, Order] = {}
         self._positions: dict[tuple[str, str], Position] = {}
         self._consumed: dict[tuple[str, str, Decimal], _Consumed] = {}
@@ -456,13 +463,17 @@ class PaperBroker:
             return
         acct = st.get_account()
         if acct is None:
-            st.save_account(starting_balance=default_start, cash=default_start, ts=self._now())
+            st.save_account(starting_balance=default_start, cash=default_start,
+                           profit_sweep_enabled=self.profit_sweep_enabled, profit_sweep_pct=self.profit_sweep_pct,
+                           ts=self._now())
             return
         self.starting_balance = acct["starting_balance"]
         self.cash = acct["cash"]
         self.realized_pnl = acct["realized_pnl"]
         self.fees_paid = acct["fees_paid"]
         self.reserved_profit = acct.get("reserved_profit", ZERO)
+        self.profit_sweep_enabled = acct.get("profit_sweep_enabled", self.profit_sweep_enabled)
+        self.profit_sweep_pct = acct.get("profit_sweep_pct", self.profit_sweep_pct)
         self._peak_equity = acct["peak_equity"]
         self._max_dd_pct = acct["max_drawdown_pct"]
         self._open = {o.id: o for o in st.open_orders()}
@@ -494,7 +505,7 @@ class PaperBroker:
         held = {p.ticker for p in self._positions.values() if p.count > 0}
         out: dict[str, Any] = {
             "account": (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
-                        self._peak_equity, self._max_dd_pct),
+                        self.profit_sweep_enabled, self.profit_sweep_pct, self._peak_equity, self._max_dd_pct),
             "broker.consumed": [[t, s, str(p), str(e.qty), iso(e.ts), str(e.shown), e.grown]
                                 for (t, s, p), e in sorted(self._consumed.items())],
             "broker.cursors": {t: [iso(ts), sorted(ids)] for t, (ts, ids) in sorted(self._cursors.items())},
@@ -518,8 +529,8 @@ class PaperBroker:
                 continue
             if key == "account":
                 st.save_account(starting_balance=value[0], cash=value[1], realized_pnl=value[2], fees_paid=value[3],
-                                reserved_profit=value[4], peak_equity=value[5], max_drawdown_pct=value[6],
-                                ts=self._now())
+                                reserved_profit=value[4], profit_sweep_enabled=value[5], profit_sweep_pct=value[6],
+                                peak_equity=value[7], max_drawdown_pct=value[8], ts=self._now())
             else:
                 st.set_kv(key, value)
             written[key] = value
@@ -532,11 +543,11 @@ class PaperBroker:
 
     def _sweep_profit(self, pnl: Decimal) -> None:
         """Move a fraction of a closed/settled trade's profit out of ``cash`` into
-        ``reserved_profit`` (``AccountSettings.profit_sweep_pct``), so it is never put back in
-        the tradeable pool. Losses are left alone - only realized gains are swept."""
-        if pnl <= 0 or self.profit_sweep_frac <= 0:
+        ``reserved_profit`` (``AccountSettings.profit_sweep_pct``/``profit_sweep_enabled``), so it
+        is never put back in the tradeable pool. Losses are left alone - only realized gains are swept."""
+        if not self.profit_sweep_enabled or pnl <= 0 or self.profit_sweep_pct <= 0:
             return
-        amount = floor_to(pnl * self.profit_sweep_frac, self.precision)
+        amount = floor_to(pnl * self.profit_sweep_pct / 100, self.precision)
         amount = min(amount, self.cash)
         if amount <= 0:
             return
@@ -551,6 +562,7 @@ class PaperBroker:
 
     def _snapshot(self) -> tuple[Any, ...]:
         return (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
+                self.profit_sweep_enabled, self.profit_sweep_pct,
                 {k: _copy_order(o) for k, o in self._open.items()},
                 {k: dataclasses.replace(p) for k, p in self._positions.items()},
                 {k: dataclasses.replace(e) for k, e in self._consumed.items()},
@@ -559,7 +571,8 @@ class PaperBroker:
                 {k: dict(v) for k, v in self._stats.items()}, dict(self._persisted))
 
     def _restore(self, snap: tuple[Any, ...]) -> None:
-        (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit, self._open,
+        (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
+         self.profit_sweep_enabled, self.profit_sweep_pct, self._open,
          self._positions, self._consumed, self._cursors, self._marks, self._day_start, self._peak_equity,
          self._max_dd_pct, self._settled, self._wins, self._stats, self._persisted) = snap
 
@@ -1979,6 +1992,7 @@ class PaperBroker:
             equity=equity, equity_mid=equity_mid, realized_pnl=self.realized_pnl,
             unrealized_pnl=lv - cost - ofees, unrealized_pnl_mid=mv - cost - ofees, fees_paid=self.fees_paid,
             reserved_profit=self.reserved_profit, net_worth=net_worth,
+            profit_sweep_enabled=self.profit_sweep_enabled, profit_sweep_pct=self.profit_sweep_pct,
             total_pnl=total,
             total_return_pct=(total / self.starting_balance * 100) if self.starting_balance else ZERO,
             todays_pnl=net_worth - day_start, day_start_equity=day_start,
@@ -2073,11 +2087,66 @@ class PaperBroker:
         """Wipe the paper account (store tables included) and start over (one transaction)."""
         async with self._lock:
             start = D(starting_balance) if starting_balance is not None else self.starting_balance
+            sweep_enabled, sweep_pct = self.profit_sweep_enabled, self.profit_sweep_pct  # kept across reset
             if self.store is not None:
                 with self.store.transaction():
                     self.store.reset_paper_state()
-                    self.store.save_account(starting_balance=start, cash=start, ts=self._now())
+                    self.store.save_account(starting_balance=start, cash=start,
+                                            profit_sweep_enabled=sweep_enabled, profit_sweep_pct=sweep_pct,
+                                            ts=self._now())
             self._init_state(start)
+            self.profit_sweep_enabled, self.profit_sweep_pct = sweep_enabled, sweep_pct
             self._persisted = self._state_values()
             self._log("info", "account", f"paper account reset to {start}")
             return self.account()
+
+    async def set_profit_sweep(self, *, enabled: bool | None = None, pct: Any = None) -> AccountState:
+        """Turn the profit sweep on/off and/or change its %% (``PATCH /api/account``); takes effect
+        on the next settlement/close and persists across restarts."""
+        async with self._lock:
+            with self._atomic():
+                if pct is not None:
+                    p = D(pct)
+                    if not (0 <= p <= 100):
+                        raise ValueError("profit_sweep_pct must be between 0 and 100")
+                    self.profit_sweep_pct = p
+                if enabled is not None:
+                    self.profit_sweep_enabled = bool(enabled)
+                if self.store is not None:
+                    with self.store.transaction():
+                        written = self._write_state()
+                    self._persisted.update(written)
+            self._log("info", "account", f"profit sweep: enabled={self.profit_sweep_enabled} "
+                      f"pct={self.profit_sweep_pct}")
+            return self.account()
+
+    async def withdraw_reserved_profit(self, *, amount: Any = None, pct: Any = None) -> Decimal:
+        """Move money from ``reserved_profit`` back into tradeable ``cash`` (manual, reverses past
+        sweeps). ``amount`` ($) or ``pct`` (%% of the current ``reserved_profit``); neither given
+        withdraws it all. Returns the amount actually moved (capped at ``reserved_profit``)."""
+        if amount is not None and pct is not None:
+            raise ValueError("pass amount or pct, not both")
+        async with self._lock:
+            with self._atomic():
+                if pct is not None:
+                    p = D(pct)
+                    if not (0 <= p <= 100):
+                        raise ValueError("pct must be between 0 and 100")
+                    moved = floor_to(self.reserved_profit * p / 100, self.precision)
+                elif amount is not None:
+                    moved = D(amount)
+                    if moved < 0:
+                        raise ValueError("amount must be >= 0")
+                else:
+                    moved = self.reserved_profit
+                moved = min(moved, self.reserved_profit)
+                self.reserved_profit -= moved
+                self.cash += moved
+                if self.store is not None:
+                    with self.store.transaction():
+                        written = self._write_state()
+                    self._persisted.update(written)
+            if moved > 0:
+                self._log("info", "account", f"${moved} moved from reserved profit back to cash")
+            return moved
+
