@@ -25,15 +25,22 @@ Rule (one decision per 15-minute window)
   (default 9.75 < m <= 10). The edge is a sharp peak at exactly 10:00 (research lag profile: lag
   10 +3.7 / +4.9c, lag 9 +1.8 / +2.1c, lag 11 +1.4 / -0.8c; a one-minute-old quote +1.4 / +0.7c),
   so the strategy ticks every ``tick_interval_s`` = 5 s (decisions land in (9.92, 10]) and a
-  decision later than 15 s is skipped rather than traded. Every intent and skip carries the
-  decision lag (``lag_s`` = seconds after the 10:00 mark) so forward results can be split by it.
+  decision later than 15 s is skipped rather than traded. ``ctx.now`` is frozen at the tick start,
+  so the deadline is checked again after the model and book reads against the engine's real clock
+  (``ctx.clock()``, unrounded seconds): a decision whose network reads ran past the limit is
+  skipped with ``skip="late"`` (backtest contexts have no clock, so replay results are unchanged).
+  Every intent and skip carries the decision lag (``lag_s`` = real seconds after the 10:00 mark)
+  so forward results can be split by it.
   New windows are picked up by a series refresh every 20 s (``UniverseSpec.refresh_s``), and a
   minute before the decision the window's event is fetched (``ctx.event``) so the order's fee
   lookup is a cache hit.
 * **Inputs, in order**: the model inputs first (settled windows, Coinbase candles, spot last),
   then the order book, fetched **after** the spot (``ctx.orderbook(t, max_age_s=0)`` where the
   context supports it), so the book the decision uses is never older than the spot it is
-  compared with (Kalshi absorbs spot moves in about 1.5 s).
+  compared with (Kalshi absorbs spot moves in about 1.5 s). The spot is fetched fresh too
+  (``spot("BTC", max_age_s=0)``, not the feed's 5 s cache): after a sharp move a 5 s old spot
+  makes a favourite that just weakened look cheap, an adverse selection the research (same-second
+  candles) did not have. A feed whose ``spot`` takes no ``max_age_s`` is called plainly.
 * **Side**: a side is a candidate when its best ask is inside ``[price_min, price_max]``
   (default [0.85, 0.97], inclusive): YES at the YES ask, NO at the NO ask (= 1 - YES bid).
 * **Model** (``use_model``, default on): P(YES) = 1 - F((ln(K - basis) - ln S) / sigma), F = the
@@ -534,7 +541,6 @@ class Btc15mFavorite(Strategy):
     async def _evaluate(self, ctx: StrategyContext, m: Market, mtc: float) -> OrderIntent | None:
         p = self.params
         t = m.ticker
-        lag = round((float(p["entry_minutes_max"]) - mtc) * 60, 1)  # seconds after the 10:00 mark
         # model inputs first (spot last), then the book: the decision book is never older than the spot
         model: ModelView | None = None
         why = ""
@@ -542,11 +548,26 @@ class Btc15mFavorite(Strategy):
             model = await self.model(ctx, m)
         except ModelUnavailable as e:
             why = str(e)
+        book: Any = None
+        book_error: Exception | None = None
         try:
             book = await _fresh_book(ctx, t)
         except Exception as e:  # the next tick in the window retries
-            ctx.log(f"{t}: order book unavailable at {mtc:.2f} min to close (lag {lag:g}s; {type(e).__name__}: "
-                    f"{e}); will retry within the window", ticker=t, skip="no_book", lag_s=lag)
+            book_error = e
+        # ctx.now is frozen at the tick start: after the network reads, the real clock decides
+        real_mtc = min(mtc, _minutes_to_close(ctx, m))
+        lag = round((float(p["entry_minutes_max"]) - real_mtc) * 60, 1)  # seconds after the 10:00 mark
+        if real_mtc <= float(p["entry_minutes_min"]):
+            self._decide(m)  # the window's deadline has passed: no later tick can trade it
+            limit_s = (float(p["entry_minutes_max"]) - float(p["entry_minutes_min"])) * 60
+            ctx.log(f"{t}: skip: the reads finished at {real_mtc:.2f} min to close (lag {lag:g}s), past the "
+                    f"{limit_s:g}s decision limit", ticker=t, skip="late", lag_s=lag)
+            return None
+        mtc = real_mtc
+        if book_error is not None:
+            ctx.log(f"{t}: order book unavailable at {mtc:.2f} min to close (lag {lag:g}s; "
+                    f"{type(book_error).__name__}: {book_error}); will retry within the window", ticker=t,
+                    skip="no_book", lag_s=lag)
             return None
         lo_px, hi_px = D(p["price_min"]), D(p["price_max"])
         asks: dict[str, Decimal | None] = {"yes": book.best_yes_ask, "no": book.best_no_ask}
@@ -733,9 +754,9 @@ class Btc15mFavorite(Strategy):
             raise ModelUnavailable(f"basis needs {BASIS_MIN_EVENTS} settled windows with Coinbase data, "
                                    f"have {n_basis}")
 
-        # 4. spot (last: freshest)
+        # 4. spot (last: freshest, and fetched now rather than taken from the feed's cache)
         try:
-            q = await spot_feed.spot(SYMBOL)
+            q = await _call_fresh(spot_feed.spot, SYMBOL)
         except Exception as e:  # FeedError, HTTP errors, ...: skip (retried within the window)
             raise ModelUnavailable(f"Coinbase spot: {type(e).__name__}: {e}") from None
         if not _src_ok(getattr(q, "source", "")):
@@ -780,16 +801,30 @@ class Btc15mFavorite(Strategy):
         return head + body + tail
 
 
+def _minutes_to_close(ctx: StrategyContext, m: Market) -> float:
+    """Minutes to ``m``'s close on the context's real clock (``ctx.clock()``; ``ctx.now`` if it has none)."""
+    clock = getattr(ctx, "clock", None)
+    real = clock() if callable(clock) else None
+    if not isinstance(real, datetime):
+        real = ctx.now
+    return (m.close_time - real).total_seconds() / 60.0  # type: ignore[operator]
+
+
 def _f(x: Decimal | None) -> float | None:
     return float(x) if x is not None else None
 
 
-async def _fresh_book(ctx: StrategyContext, ticker: str) -> Any:
-    """A book fetched now where the context supports ``max_age_s`` (the engine's), else ``ctx.orderbook``."""
-    fn = ctx.orderbook
+async def _call_fresh(fn: Any, *args: Any) -> Any:
+    """``await fn(*args, max_age_s=0)`` (data fetched now, never cached) where ``fn`` takes
+    ``max_age_s``, else ``await fn(*args)``."""
     try:
         takes_age = "max_age_s" in inspect.signature(fn).parameters
     except (TypeError, ValueError):
         takes_age = False
-    return await (fn(ticker, max_age_s=0) if takes_age else fn(ticker))  # type: ignore[call-arg]
+    return await (fn(*args, max_age_s=0) if takes_age else fn(*args))
+
+
+async def _fresh_book(ctx: StrategyContext, ticker: str) -> Any:
+    """A book fetched now where the context supports ``max_age_s`` (the engine's), else ``ctx.orderbook``."""
+    return await _call_fresh(ctx.orderbook, ticker)
 

@@ -1255,7 +1255,7 @@ function analyticsOf(st: MockState) {
     by_strategy,
     calibration,
     readiness: overall.readiness,
-    params: { min_settled_trades: MOCK_MIN_SETTLED_TRADES, max_drawdown_pct: MOCK_MAX_DRAWDOWN_PCT, n_boot: 400, ci: 0.95, cluster: "event_ticker" },
+    params: { min_settled_trades: MOCK_MIN_SETTLED_TRADES, max_drawdown_pct: MOCK_MAX_DRAWDOWN_PCT, n_boot: 400, ci: 0.95, cluster: "utc_day" },
   };
 }
 

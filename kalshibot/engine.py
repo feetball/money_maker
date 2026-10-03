@@ -28,7 +28,7 @@ job                    default interval      what it does
                                              otherwise); the mark then freezes until the result
 ``postclose``          10 s                  settlement poll while a held market is in its first
                                              10 min after close (no request otherwise)
-``housekeeping``       1 h                   prune old logs/signals (disk hygiene)
+``housekeeping``       1 h                   prune old logs/signals (disk hygiene; ``engine.keep_log_rows``)
 =====================  ====================  =================================================
 
 Maintenance jobs run one at a time. Strategy ticks do not: the ``tick`` job only starts
@@ -124,6 +124,8 @@ MIN_TICK_INTERVAL_S = 1.0
 MIN_SERIES_REFRESH_S = 15.0
 #: Skipped-tick warnings are logged at most this often per strategy.
 SKIP_WARN_EVERY_S = 300.0
+#: ``Engine.health()``: no completed tick for ``max(this, 4 x tick_s)`` seconds is unhealthy.
+HEALTH_MIN_TICK_AGE_S = 120.0
 
 
 # --------------------------------------------------------------------------- JSON helpers
@@ -270,6 +272,11 @@ class StrategyRuntime:
     enabled_source: str = "default"
     overrides: dict[str, Any] = field(default_factory=dict)  # runtime param overrides (store)
     last_tick_at: datetime | None = None
+    #: end of the last ``on_tick`` that returned without raising (``last_tick_at`` also advances on a
+    #: failed tick, so it cannot tell a working strategy from one that raises every time)
+    last_ok_at: datetime | None = None
+    #: when the dashboard last switched the strategy on (the health check's grace anchor)
+    enabled_at: datetime | None = None
     last_duration_ms: float | None = None
     last_error: str | None = None
     ticks: int = 0
@@ -367,6 +374,12 @@ class EngineContext:
         self.book_max_age_s = engine.ctx_book_max_age_s
         self.cancels: list[CancelIntent] = []  # queued by ``cancel``; applied before the tick's orders
 
+    def clock(self) -> datetime:
+        """The engine's real clock, read now. ``now`` is frozen at the start of the tick, so a
+        strategy whose timing matters re-reads this after its network calls (a decision whose
+        reads took 20 s is 20 s later than ``now`` says)."""
+        return self._engine.clock()
+
     async def series(self, series_ticker: str) -> Series:
         return await self._md.series(series_ticker)
 
@@ -451,7 +464,7 @@ class Engine:
         max_intents_per_tick: int = 50,
         ctx_book_max_age_s: float = 5.0,
         series_prefetch: int = 25,
-        keep_rows: int = 50_000,
+        keep_rows: int | None = None,
         equity_full_days: float = 7.0,
         equity_bucket_s: int = 3600,
     ) -> None:
@@ -487,7 +500,8 @@ class Engine:
         self.max_intents_per_tick = int(max_intents_per_tick)
         self.ctx_book_max_age_s = float(ctx_book_max_age_s)
         self.series_prefetch = int(series_prefetch)
-        self.keep_rows = int(keep_rows)
+        #: rows kept in logs/signals by the housekeeping job (``engine.keep_log_rows``; 0 = keep all)
+        self.keep_rows = int(keep_rows if keep_rows is not None else getattr(eng, "keep_log_rows", 50_000))
         self.equity_full_days = float(equity_full_days)
         self.equity_bucket_s = int(equity_bucket_s)
 
@@ -674,6 +688,7 @@ class Engine:
             rt.overrides = new_overrides
         if enabled is not None:
             if enabled and not rt.enabled:
+                rt.enabled_at = self.clock()
                 rt.next_due = 0.0  # tick as soon as possible
                 tick = self.jobs.get("tick")
                 if tick is not None:
@@ -1150,6 +1165,7 @@ class Engine:
             rt.last_tick_at = now
             rt.last_duration_ms = round((self.mono() - t0) * 1000, 1)
         rt.last_error = None
+        rt.last_ok_at = now
         cancels = [x for x in items if isinstance(x, CancelIntent)]
         intents = self._cap_intents(rt, [x for x in items if not isinstance(x, CancelIntent)])
         rt.intents += len(intents)
@@ -1278,7 +1294,7 @@ class Engine:
     async def _job_housekeeping(self) -> None:
         if self.store is None:
             return
-        for table in ("logs", "signals"):
+        for table in ("logs", "signals") if self.keep_rows > 0 else ():  # 0 = never prune
             n = self.store.prune(table, self.keep_rows)
             if n:
                 log.info("pruned %d old %s rows", n, table)
@@ -1657,6 +1673,61 @@ class Engine:
                 log.exception("failed to write log row")
         self.bus.publish("log", {"id": rid, "ts": iso(now), "level": level, "kind": kind, "message": message,
                                  "data": clean})
+
+    # ------------------------------------------------------------------ health
+
+    def health(self) -> dict[str, Any]:
+        """Is the engine alive and deciding? (``GET /api/health``; ``ok`` False = answer 503 with ``reason``).
+
+        Unhealthy: the engine is stopped or its task died; Kalshi is unreachable; the engine has not
+        completed a tick within ``max(120 s, 4 x engine.tick_s)`` of its last tick or its (re)start; or
+        an enabled strategy's ``on_tick`` has raised on every tick for that long (no clean tick since
+        it was switched on or the engine started). ``/api/status`` answers 200 in all of these cases,
+        and a strategy that raises every tick still advances its ``last_tick_at``.
+
+        A scheduled exchange pause is healthy but ``gated="trading_paused"``: no strategy ticks run
+        meanwhile, so the tick and strategy checks are skipped."""
+        now = self.clock()
+        limit = max(HEALTH_MIN_TICK_AGE_S, 4 * self.intervals["tick"])
+        out: dict[str, Any] = {"ok": True, "reason": None, "gated": None, "max_tick_age_s": limit,
+                               "last_tick_at": iso(self.last_tick_at), "tick_age_s": None,
+                               "failing_strategies": []}
+
+        def bad(reason: str) -> dict[str, Any]:
+            out.update(ok=False, reason=reason)
+            return out
+
+        task = self._task
+        if task is not None and task.done():
+            return bad(f"the engine task died ({self.last_error or 'no error recorded'})")
+        if task is None or not self.running:
+            return bad("the engine is stopped")
+        if self.kalshi_down:
+            return bad(f"Kalshi is unreachable ({getattr(self.md, 'exchange_error', None) or self.last_error})")
+        if self.trading_paused:
+            out["gated"] = "trading_paused"
+            return out
+        marks = [t for t in (self.started_at, self.last_tick_at) if t is not None]
+        age = (now - max(marks, default=now)).total_seconds()
+        out["tick_age_s"] = round(age, 1)
+        if age > limit:
+            return bad(f"the engine has not ticked for {age:.0f}s (limit {limit:.0f}s)")
+        for name in sorted(self.runtimes):
+            rt = self.runtimes[name]
+            if not rt.enabled or rt.last_error is None:
+                continue
+            since = max((t for t in (rt.last_ok_at, rt.enabled_at, self.started_at) if t is not None),
+                        default=now)
+            failing_s = (now - since).total_seconds()
+            if failing_s > limit:
+                out["failing_strategies"].append({"name": name, "failing_for_s": round(failing_s, 1),
+                                                  "last_error": rt.last_error})
+        if out["failing_strategies"]:
+            f = out["failing_strategies"][0]
+            names = ", ".join(x["name"] for x in out["failing_strategies"])
+            return bad(f"strategy {names}: on_tick has raised on every tick for {f['failing_for_s']:.0f}s "
+                       f"(limit {limit:.0f}s; {f['name']}: {f['last_error']})")
+        return out
 
     # ------------------------------------------------------------------ status
 

@@ -16,10 +16,14 @@ Per strategy and overall (``GET /api/analytics``)::
     realized_pnl_with_edge (P&L of the trades that carried an expected edge), edge_capture,
     brier, brier_n, fees, max_drawdown, max_drawdown_pct, readiness
 
-The bootstrap resamples **events** (clusters) with replacement, not individual trades:
-trades on one event (e.g. several strikes of one BTC hour) are correlated, and treating
-them as independent overstates confidence. Deterministic (seeded) so the numbers do not
-jitter between polls.
+The bootstrap resamples **UTC days** (clusters) with replacement, not individual trades or
+events. Trades on one event (e.g. several strikes of one BTC hour) are correlated, but so are
+different events on one day: one market regime moves every KXBTC15M window of that day together,
+and each of those windows is its own event, so resampling events is in effect a per-trade
+bootstrap and overstates confidence. An event belongs to one day, the UTC day of its earliest
+entry (``Trade.opened_at``, else the row time), so a partial close and the later settlement of
+the same event never split; an event without any time is its own cluster (:func:`day_clusters`).
+Deterministic (seeded) so the numbers do not jitter between polls.
 
 Go-live readiness (per strategy): ``ready`` only if ``count >= min_settled_trades`` (default
 200; ``min_settled_trades_by_strategy`` sets more for rare-loss strategies, e.g. 1,500 for the
@@ -29,7 +33,8 @@ max drawdown is within ``max_drawdown_pct`` (default 20 %).
 * Tail check: a percentile bootstrap cannot represent a loss it has not seen (200 wins of $0.17
   and no loss say nothing about a $15 wipeout), so readiness also asks whether the loss rate is
   low enough to break even. Trades are grouped by event (losses cluster: one ladder event can
-  lose 10 strikes at once); with ``k`` losing events of ``n``, the one-sided 95% Clopper-Pearson
+  lose 10 strikes at once; this bound still treats events as independent draws, unlike the
+  day-clustered CI); with ``k`` losing events of ``n``, the one-sided 95% Clopper-Pearson
   upper bound on the loss-event rate must be below break-even ``W / (W + L)`` (``W`` = mean P&L
   of winning events, ``L`` = mean loss of losing events, or - with no loss yet - the mean event
   cost, i.e. a full wipeout).
@@ -56,7 +61,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -69,6 +74,7 @@ __all__ = [
     "calibration_buckets",
     "clopper_pearson_upper",
     "compute_analytics",
+    "day_clusters",
     "drawdown",
     "headline_readiness",
     "readiness",
@@ -97,6 +103,7 @@ class Trade:
     fees: float
     expected_edge: float | None
     fair_value: float | None
+    opened_at: datetime | None = None  # when the position was opened (earliest entry of these contracts)
 
     @property
     def outcome(self) -> float | None:
@@ -122,11 +129,42 @@ def _fl(x: Any) -> float | None:
     return v if math.isfinite(v) else None
 
 
+def parse_time(x: Any) -> datetime | None:
+    """A ``datetime`` or an ISO-8601 string (``Z`` suffix allowed) as an aware UTC datetime; naive
+    values are taken as UTC; None for anything else (including an empty or unparseable string)."""
+    if isinstance(x, str):
+        txt = x.strip()
+        if not txt:
+            return None
+        try:
+            x = datetime.fromisoformat(txt[:-1] + "+00:00" if txt.endswith(("Z", "z")) else txt)
+        except ValueError:
+            return None
+    if not isinstance(x, datetime):
+        return None
+    return x.replace(tzinfo=UTC) if x.tzinfo is None else x.astimezone(UTC)
+
+
+def day_clusters(events: Sequence[Any], times: Sequence[Any]) -> list[Any]:
+    """Bootstrap cluster per row: the UTC day (``"YYYY-MM-DD"``) of the row's event's earliest time.
+
+    ``events[i]`` is row ``i``'s event and ``times[i]`` its entry time (a datetime or ISO string;
+    None or unparseable = unknown). All rows of an event share one cluster, the day of the earliest
+    time among them, so a partial close and its settlement never split. An event with no known
+    time at all is its own cluster."""
+    first: dict[Any, datetime] = {}
+    for ev, raw in zip(events, times, strict=True):
+        t = parse_time(raw)
+        if t is not None and (ev not in first or t < first[ev]):
+            first[ev] = t
+    return [first[ev].strftime("%Y-%m-%d") if ev in first else ("event", ev) for ev in events]
+
+
 def to_trade(s: Any) -> Trade:
     ticker = str(_get(s, "ticker", "") or "")
     event = str(_get(s, "event_ticker", "") or "") or ticker.rsplit("-", 1)[0]
     return Trade(
-        ts=_get(s, "ts"),
+        ts=parse_time(_get(s, "ts")),
         strategy=str(_get(s, "strategy", "") or ""),
         ticker=ticker,
         event=event,
@@ -138,6 +176,7 @@ def to_trade(s: Any) -> Trade:
         fees=_fl(_get(s, "fees")) or 0.0,
         expected_edge=_fl(_get(s, "expected_edge")),
         fair_value=_fl(_get(s, "fair_value")),
+        opened_at=parse_time(_get(s, "opened_at")),
     )
 
 
@@ -156,8 +195,8 @@ def bootstrap_ratio_ci(
     """Percentile bootstrap CI of ``sum(num) / sum(den)`` resampling clusters.
 
     ``den=None`` means one per row (the CI of the mean). ``clusters`` groups rows (e.g. by
-    event); ``None`` treats each row as its own cluster. Returns ``(None, None)`` when there
-    are fewer than two clusters (no variance estimate).
+    UTC day, see :func:`day_clusters`); ``None`` treats each row as its own cluster. Returns
+    ``(None, None)`` when there are fewer than two clusters (no variance estimate).
     """
     x = np.asarray(num, dtype=float)
     d = np.ones_like(x) if den is None else np.asarray(den, dtype=float)
@@ -313,7 +352,7 @@ def readiness(stats: Mapping[str, Any], *, min_settled_trades: int = DEFAULT_MIN
     else:
         fails.append(f"only {n} settled trades (need >= {min_settled_trades})")
     if lo is None:
-        fails.append("no confidence interval yet for the mean P&L per trade (need trades on >= 2 events)")
+        fails.append("no confidence interval yet for the mean P&L per trade (need trades on >= 2 UTC days)")
     elif lo > 0:
         passes.append(f"95% CI lower bound of mean P&L per trade is ${lo:+.4f} (> 0)")
     else:
@@ -383,7 +422,7 @@ def trade_stats(
     pnl = [t.pnl for t in ordered]
     total = float(sum(pnl))
     wins = sum(1 for t in ordered if t.pnl > 0)
-    clusters = [t.event for t in ordered]
+    clusters = day_clusters([t.event for t in ordered], [t.opened_at or t.ts for t in ordered])
     lo, hi = bootstrap_ratio_ci(pnl, None, clusters, n_boot=n_boot, seed=seed) if n >= 2 else (None, None)
     clo, chi = (bootstrap_ratio_ci(pnl, [t.count for t in ordered], clusters, n_boot=n_boot, seed=seed)
                 if n >= 2 and contracts > 0 else (None, None))
@@ -490,7 +529,7 @@ def compute_analytics(
                                         max_drawdown_pct=max_drawdown_pct),
         "params": {"min_settled_trades": min_settled_trades, "max_drawdown_pct": max_drawdown_pct,
                    "min_settled_trades_by_strategy": mins, "strategy_capital": caps,
-                   "bootstrap_resamples": n_boot, "cluster": "event_ticker"},
+                   "bootstrap_resamples": n_boot, "cluster": "utc_day"},
     }
 
 

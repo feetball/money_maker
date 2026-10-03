@@ -142,6 +142,9 @@ class EngineSettings(_Section):
     universe_max_pages: int = Field(150, ge=1)
     #: Full re-scan of the close-time window at least this often (seconds).
     universe_window_rescan_s: float = Field(900, gt=0)
+    #: Rows kept in each of the ``logs`` and ``signals`` tables; the hourly housekeeping drops the
+    #: older ones. 0 = never prune (a long paper run keeps every window's skip/trade record).
+    keep_log_rows: int = Field(50_000, ge=0)
 
 
 class PaperSettings(_Section):

@@ -784,3 +784,102 @@ async def test_engine_round_trip_fills_the_favourite(settings: Settings, fake_cl
     await svc.engine.tick()
     assert len(svc.store.list_orders("all")) == 1
     await svc.aclose()
+
+
+# --------------------------------------------------------------------------- paper-run fixes
+
+
+class CachedSpot:
+    """A live-feed stand-in: ``spot()`` serves a cached (old, pre-move) quote unless ``max_age_s=0``."""
+
+    def __init__(self, inner: ReplayCryptoFeed, cached_price: float) -> None:
+        self.inner, self.cached_price = inner, cached_price
+        self.requested: list[float | None] = []
+
+    async def spot(self, symbol: str = "BTC", *, max_age_s: float | None = None) -> SpotQuote:
+        self.requested.append(max_age_s)
+        q = await self.inner.spot(symbol)
+        if max_age_s == 0:
+            return q
+        ts = self.inner.now - timedelta(seconds=4)
+        return SpotQuote(q.symbol, self.cached_price, None, None, ts, "coinbase", ts)
+
+    async def candles(self, symbol: str = "BTC", minutes: int = 60) -> list[SpotCandle]:
+        return await self.inner.candles(symbol, minutes)
+
+
+async def test_the_decision_fetches_the_spot_fresh_not_from_the_feed_cache() -> None:
+    clock = Clock(T0)
+    strike = await strike_for(0.995)
+    holder: dict[str, CachedSpot] = {}
+
+    def wrap(f: ReplayCryptoFeed) -> CachedSpot:
+        holder["spot"] = CachedSpot(f, cached_price=S0 * 1.02)
+        return holder["spot"]
+
+    ctx = make_ctx(strike=strike, feeds=feeds_with(clock, wrap), clock=clock)
+    mv = await Btc15mFavorite(FIXED).model(ctx, ctx.markets[TICKER])
+    assert holder["spot"].requested == [0]  # asked for a quote fetched now
+    fresh = (await ctx.feeds.crypto.inner.spot("BTC")).price
+    assert mv.spot == fresh and mv.spot != holder["spot"].cached_price  # not the cached pre-move quote
+    # a feed whose spot() takes no max_age_s (the plain StaleSpot fake) is still called plainly
+    ctx = make_ctx(strike=strike, feeds=feeds_with(clock, lambda f: StaleSpot(f)), clock=clock)
+    assert (await Btc15mFavorite(FIXED).model(ctx, ctx.markets[TICKER])).spot == fresh
+
+
+@dataclass
+class SlowCtx(FakeCtx):
+    """A context whose network reads took ``read_s`` seconds: ``now`` is frozen at the tick start,
+    ``clock()`` is the engine's real time after them."""
+
+    read_s: float = 0.0
+
+    def clock(self) -> datetime:
+        return self.now + timedelta(seconds=self.read_s)
+
+
+def slow_ctx(read_s: float, *, strike: Any, **kw: Any) -> SlowCtx:
+    base = make_ctx(strike=strike, **kw)
+    return SlowCtx(now=base.now, markets=base.markets, feeds=base.feeds, books=base.books, read_s=read_s,
+                   book_error=base.book_error)
+
+
+async def test_a_decision_inside_the_limit_logs_the_real_lag() -> None:
+    strike = await strike_for(0.995)
+    ctx = slow_ctx(9.0, strike=strike)  # starts 5 s after the 10:00 mark, reads take 9 s: lag 14 s
+    s = Btc15mFavorite(FIXED)
+    (it,) = await run(s, ctx)
+    assert it.side == "yes" and "decision lag 14s" in it.reason
+    assert [d["lag_s"] for _, d in ctx.logs if d.get("trade")] == [14.0]
+    # unrounded: 14.96 s is inside the 15 s limit although the logged (rounded) lag reads 15
+    ctx = slow_ctx(9.96, strike=strike)
+    (it,) = await run(Btc15mFavorite(FIXED), ctx)
+    assert it.side == "yes" and "decision lag 15s" in it.reason
+
+
+@pytest.mark.parametrize("read_s", [10.0, 20.0, 400.0])
+async def test_a_decision_whose_reads_ran_past_the_limit_is_skipped_late(read_s: float) -> None:
+    ctx = slow_ctx(read_s, strike=await strike_for(0.995))
+    s = Btc15mFavorite(FIXED)
+    assert await run(s, ctx) == []
+    assert ctx.skips == ["late"] and "past the 15s decision limit" in ctx.text
+    assert ctx.logs[0][1]["lag_s"] == round(5.0 + read_s, 1)  # the real lag, not the tick's 5 s
+    assert s.has_decided(TICKER)  # the deadline passed: no later tick can trade this window
+    assert await run(s, ctx) == [] and ctx.skips == ["late"]  # and it is not revisited
+
+
+async def test_late_wins_over_a_failed_book_read() -> None:
+    ctx = slow_ctx(20.0, strike=await strike_for(0.995), book_error=True)
+    s = Btc15mFavorite(FIXED)
+    assert await run(s, ctx) == [] and ctx.skips == ["late"] and s.has_decided(TICKER)
+    ctx = slow_ctx(1.0, strike=await strike_for(0.995), book_error=True)  # still in time: retry
+    s = Btc15mFavorite(FIXED)
+    assert await run(s, ctx) == [] and ctx.skips == ["no_book"] and not s.has_decided(TICKER)
+    assert ctx.logs[0][1]["lag_s"] == 6.0
+
+
+async def test_a_context_without_a_clock_behaves_as_before() -> None:
+    ctx = make_ctx(strike=await strike_for(0.995))
+    assert not hasattr(ctx, "clock")  # replay/backtest contexts
+    (it,) = await run(Btc15mFavorite(FIXED), ctx)
+    assert "decision lag 5s" in it.reason

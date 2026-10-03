@@ -257,7 +257,7 @@ function CiTable({ a }: { a: AnalyticsResponse }) {
           key: "ci",
           header: "95% CI",
           align: "right",
-          title: "Bootstrap 95% confidence interval of the mean P&L per contract (clustered by event)",
+          title: "Bootstrap 95% confidence interval of the mean P&L per contract (clustered by UTC day)",
           sortValue: (r) => r.ci_low,
           render: (r) =>
             r.ci_low !== null && r.ci_high !== null ? (
@@ -436,7 +436,7 @@ export function Analytics() {
             <OverallKpis o={a.overall} />
             <Card
               title="Per-strategy results"
-              subtitle="Mean P&L per contract with 95% bootstrap confidence intervals (clustered by event); an interval entirely right of the zero line is a statistically positive edge"
+              subtitle="Mean P&L per contract with 95% bootstrap confidence intervals (clustered by UTC day); an interval entirely right of the zero line is a statistically positive edge"
               flush
             >
               {Object.keys(a.by_strategy).length === 0 && a.overall.count === 0 ? <EmptyState title="No settled trades yet" /> : <CiTable a={a} />}

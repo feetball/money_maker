@@ -543,7 +543,7 @@ export type BacktestStatus = "queued" | "running" | "done" | "failed" | (string 
 
 /**
  * Metrics are open-ended (§10: P&L, per-contract EV with bootstrap CI clustered by
- * event, hit rate, max drawdown, Sharpe-like ratio). Known keys are rendered with
+ * UTC day, hit rate, max drawdown, Sharpe-like ratio). Known keys are rendered with
  * labels/units; any other numeric key is rendered generically.
  */
 export interface BacktestMetrics {

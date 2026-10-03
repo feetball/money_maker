@@ -316,7 +316,9 @@ class StrategyContext(Protocol):
     now, never a cached one), ``async orderbooks(tickers)``, ``async market(ticker)``,
     ``async event(event_ticker)`` (lazily fetched, cached ~1 h) and
     ``cancel(order_id=None, *, ticker=None, reason="")`` (queues a :class:`CancelIntent`;
-    returning one from ``on_tick`` is equivalent and also works in other contexts).
+    returning one from ``on_tick`` is equivalent and also works in other contexts) and
+    ``clock()`` (the engine's real time now; ``now`` is frozen at the tick start. Backtest
+    contexts have no ``clock``, so strategies fall back to ``now``).
     """
 
     now: datetime

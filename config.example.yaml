@@ -33,6 +33,9 @@ engine:
   # active markets) on 2026-09-27; a cap of 100 left markets 1.5-3 days out unread.
   universe_max_pages: 150
   universe_window_rescan_s: 900    # full re-scan of the window at least this often
+  # Rows kept in each of the logs and signals tables (hourly housekeeping drops the older ones).
+  # 0 = never prune: every window's skip/trade record of a long run stays.
+  keep_log_rows: 50000
 
 paper:
   # Paper fills "use up" displayed depth: what we took stays unavailable while the level

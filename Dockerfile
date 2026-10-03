@@ -42,7 +42,9 @@ RUN mkdir -p /app/data /app/research
 EXPOSE 8765
 # Same clean-shutdown path as Ctrl-C.
 STOPSIGNAL SIGINT
+# /api/health answers 503 (urlopen raises, exit 1) when the engine is stopped or dead, Kalshi is
+# unreachable, it has stopped ticking or a strategy raises on every tick; /api/status is always 200.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/api/status', timeout=4).status == 200 else 1)"
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4).status == 200 else 1)"
 
 CMD ["kalshibot", "serve"]

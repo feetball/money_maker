@@ -529,7 +529,7 @@ order book from candle bid/ask with a configurable per-level size cap, the same
 the decision time (as live) and the approved orders execute as timed events in clock order with
 the settlements, so the clock never runs ahead of the tick being evaluated. The strategy's own
 risk limits (§8) apply. Output: metrics (P&L, per-contract
-EV with bootstrap CI clustered by event, hit rate, max drawdown, Sharpe-like ratio,
+EV with bootstrap CI clustered by UTC day, hit rate, max drawdown, Sharpe-like ratio,
 per-month breakdown), equity curve, trade list. Results are stored and exposed via the API.
 
 ---
@@ -537,7 +537,8 @@ per-month breakdown), equity curve, trade list. Results are stored and exposed v
 ## 11. Analytics (`kalshibot/analytics.py`)
 
 Per strategy and overall, over **settled** trades: count, total/mean P&L per contract,
-95% CI (bootstrap), expected edge vs realized P&L, Brier score & calibration buckets of
+95% CI (bootstrap resampling UTC days: an event belongs to the day of its earliest entry, since one
+market regime moves every event of a day together), expected edge vs realized P&L, Brier score & calibration buckets of
 `fair_value`, win rate, max drawdown, and a **go-live readiness** verdict:
 `{"ready": bool, "reasons": [...]}` — ready only if ≥ `min_settled_trades` (default 200;
 `analytics.min_settled_trades_by_strategy`: btc15m_favorite 300, ladder_favorite 1500,
@@ -623,6 +624,7 @@ Base `/api`. All responses JSON. Errors: `{"detail": str}` with 4xx/5xx.
 | Method & path | Response |
 |---|---|
 | `GET /api/status` | `{mode:"paper", engine:{running, started_at, last_tick_at, tick_count, universe_size, last_error, kill_switch}, exchange:{trading_active}, server_time}` |
+| `GET /api/health` | 200 `{ok:true, gated, last_tick_at, tick_age_s, max_tick_age_s, ...}` while the engine runs and decides; **503** `{ok:false, detail: reason, ...}` when it is stopped or its task died, Kalshi is unreachable, it has not ticked within `max(120 s, 4 x engine.tick_s)` of its last tick or (re)start, or an enabled strategy's `on_tick` has raised on every tick for that long. A scheduled exchange pause is 200 with `gated: "trading_paused"`. The Docker HEALTHCHECK calls it (`/api/status` is 200 even after the engine loop crashed) |
 | `POST /api/engine/start` / `POST /api/engine/stop` | `status` payload |
 | `POST /api/engine/kill-switch` `{on: bool}` | `status` payload (engaging it cancels every resting order) |
 | `GET /api/account` | `{starting_balance, cash, reserved_cash, positions_liquidation_value, positions_mid_value, equity, equity_mid, realized_pnl, unrealized_pnl, fees_paid, total_pnl, total_return_pct, todays_pnl, max_drawdown_pct, open_positions, open_orders, settled_trades, win_rate}` |
@@ -674,7 +676,8 @@ engine:  {autostart: true, universe_refresh_s: 120, tick_s: 30, order_poll_s: 15
           settlement_poll_s: 60, snapshot_s: 60,
           scanner_days_to_close: 0.5,       # Markets-page baseline window (0 = strategies only)
           universe_max_pages: 150,          # for the whole window scan, read nearest close first (§4)
-          universe_window_rescan_s: 900}
+          universe_window_rescan_s: 900,
+          keep_log_rows: 50000}             # logs/signals rows kept by housekeeping (0 = never prune)
 paper:   {consumed_liquidity_ttl_s: 300, default_gtc_expiry_s: 3600, fee_precision: 0.01,
           max_trade_polls_per_pass: 8,   # trade-tape reads per resting-order pass (0 = no cap)
           taker_latency_s: 0.25}         # engine orders walk only books received this long after the decision

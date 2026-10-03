@@ -6,6 +6,8 @@ can place a real order.
 * ``create_app(settings)`` builds the whole stack (store, public Kalshi client, market
   data, paper broker, risk manager, feeds, engine) in the app lifespan and starts the
   engine when ``engine.autostart`` is true. Tests pass ``services=`` (fakes) instead.
+* ``GET /api/health``: 200 while the engine runs and decides, 503 + ``{"detail": reason}`` when it
+  is stopped/dead, Kalshi is down, it stopped ticking, or a strategy fails every tick.
 * Errors are ``{"detail": str}`` with a 4xx/5xx status (validation errors are flattened
   to one string). Unknown ``/api/...`` paths are JSON 404s, never the SPA.
 * ``GET /api/stream`` is Server-Sent Events: ``event: <type>\\ndata: <json>\\nid: <n>\\n\\n``
@@ -488,6 +490,16 @@ def create_app(
     @app.get("/api/status", response_model=StatusResponse)
     async def get_status(request: Request) -> dict[str, Any]:
         return status_payload(_svc(request))
+
+    @app.get("/api/health")
+    async def get_health(request: Request) -> JSONResponse:
+        """200 while the engine is alive and deciding, else 503 with a plain ``detail`` (the Docker
+        HEALTHCHECK). ``/api/status`` stays 200 even after the engine loop has crashed. A scheduled
+        exchange pause is 200 with ``gated: "trading_paused"``. See ``Engine.health``."""
+        h = _svc(request).engine.health()
+        if h["ok"]:
+            return JSONResponse(h)
+        return JSONResponse({**h, "detail": h["reason"]}, status_code=503)
 
     @app.post("/api/engine/start", response_model=StatusResponse)
     async def engine_start(request: Request) -> dict[str, Any]:

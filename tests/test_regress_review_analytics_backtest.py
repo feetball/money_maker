@@ -19,7 +19,15 @@ from typing import Any, ClassVar
 
 import pytest
 
-from kalshibot.analytics import clopper_pearson_upper, compute_analytics, readiness, tail_stats, to_trade, trade_stats
+from kalshibot.analytics import (
+    bootstrap_ratio_ci,
+    clopper_pearson_upper,
+    compute_analytics,
+    readiness,
+    tail_stats,
+    to_trade,
+    trade_stats,
+)
 from kalshibot.backtest.data import ReplayDataset
 from kalshibot.backtest.runner import run_backtest
 from kalshibot.config import Settings
@@ -32,10 +40,11 @@ M0 = 1_790_000_000 - 1_790_000_000 % 86400  # a UTC midnight (epoch s)
 
 
 def st(i: int, pnl: str, *, count: int = 15, payout: str = "15", strategy: str = "ladder", event: str | None = None,
-       fees: str = "0.03") -> Settlement:
+       fees: str = "0.03", ts: datetime | None = None) -> Settlement:
+    # one trade per UTC day by default, so the day clusters of the bootstrap equal the events
     return Settlement(id=i, ticker=f"KX-{i}", result="yes" if D(payout) > 0 else "no", side="yes", count=count,
                       payout=D(payout), cost_basis=D(payout) - D(pnl) - D(fees), pnl=D(pnl),
-                      ts=T0 + timedelta(hours=i), strategy=strategy, event_ticker=event or f"EV-{i}",
+                      ts=ts or T0 + timedelta(days=i), strategy=strategy, event_ticker=event or f"EV-{i}",
                       kind="settlement", fees=D(fees))
 
 
@@ -66,15 +75,37 @@ def test_a_rare_loss_rule_is_not_ready_on_200_wins() -> None:
     assert not trade_stats([to_trade(x) for x in lost], n_boot=100)["readiness"]["ready"]
 
 
-def test_readiness_passes_the_tail_check_for_a_btc15m_like_record() -> None:
+def _btc15m_like(lose_on: Any) -> list[Settlement]:
+    """300 windows, three a day (100 UTC days); 55 contracts at 0.90: win +$5.10, loss -$49.90."""
     rows = []
-    for i in range(300):  # 55 contracts at 0.90: win +$5.10, loss -$49.90; 18 losses in 300 (6%)
-        lose = i % 50 < 3
+    for i in range(300):
+        lose = lose_on(i)
         rows.append(st(i, "-49.90" if lose else "5.10", count=55, payout="0" if lose else "55", strategy="btc",
-                       fees="0.40"))
+                       fees="0.40", ts=T0 + timedelta(days=i // 3, hours=i % 3)))
+    return rows
+
+
+def test_readiness_passes_the_tail_check_for_a_btc15m_like_record() -> None:
+    # 18 losses (6%) spread over 18 different days: the day-clustered CI is still above zero
+    rows = _btc15m_like(lambda i: i % 50 in (0, 17, 34))
     s = trade_stats([to_trade(x) for x in rows], min_settled_trades=300, n_boot=500)
     assert s["tail"]["loss_events"] == 18 and s["tail"]["loss_rate_upper"] < s["tail"]["break_even_loss_rate"]
-    assert s["readiness"]["ready"] is True
+    assert s["readiness"]["ready"] is True and s["ci_low"] > 0
+
+
+def test_the_same_losses_arriving_three_to_a_day_are_not_ready() -> None:
+    # the same 18 losses in 300 trades, but whole days are lost (6 of 100 days, 3 windows each): one
+    # regime moves all of a day's windows together, so the per-event CI was far too tight
+    rows = _btc15m_like(lambda i: (i // 3) % 17 == 0)
+    s = trade_stats([to_trade(x) for x in rows], min_settled_trades=300, n_boot=500)
+    assert s["tail"]["loss_events"] == 18 and s["tail"]["loss_rate_upper"] < s["tail"]["break_even_loss_rate"]
+    assert s["ci_low"] < 0 and s["readiness"]["ready"] is False
+    assert any("must be > 0" in r for r in s["readiness"]["reasons"])
+    # resampling the 300 windows as independent events (the old clusters) would have passed them
+    events = [t.event for t in (to_trade(x) for x in rows)]
+    pnl = [float(x.pnl) for x in rows]
+    lo, _ = bootstrap_ratio_ci(pnl, None, events, n_boot=500)
+    assert lo is not None and lo > 0
 
 
 def test_per_strategy_minimums_and_drawdown_against_the_allocation() -> None:

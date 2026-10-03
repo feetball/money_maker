@@ -251,7 +251,9 @@ def test_strategy_allocations_default_from_the_classes_and_config() -> None:
 
 
 def test_experimental_strategies_cannot_starve_the_primary() -> None:
-    r = RiskManager(Settings())  # defaults: 60% total, 50% fallback
+    # defaults: 60% total, 50% fallback. The clock is pinned to T0: the market closes T0 + 1 day, so
+    # against the real clock it is long closed and min_seconds_to_close rejects before the caps are tested
+    r = RiskManager(Settings(), clock=lambda: T0)
     r.set_strategy_limits(strategy_limits(Settings(), {"btc15m_favorite": Btc15mFavorite,
                                                        "ladder_favorite": LadderFavorite,
                                                        "maker_favorite": MakerFavoriteHarvest}))

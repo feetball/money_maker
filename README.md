@@ -57,6 +57,28 @@ directory, so they survive rebuilds and restarts. The container restarts automat
   `kalshibot serve` is running, because both would use the same paper account in `data/`.
   Stop the native one first (Ctrl-C).
 - Logs are capped at 3 × 10 MB. The image is about 700 MB.
+- **Health:** the image's `HEALTHCHECK` calls `GET /api/health`, which answers 503 with a plain
+  reason when the engine is stopped or its task died, Kalshi is unreachable, the engine has not
+  ticked within `max(120 s, 4 × engine.tick_s)` of its last tick or (re)start, or an enabled
+  strategy's `on_tick` has raised on every tick for that long. `/api/status` stays 200 in all of
+  these cases. A scheduled exchange pause is healthy (`gated: "trading_paused"`). Docker only
+  labels the container `unhealthy`; `restart: unless-stopped` does not act on that.
+
+### The btc15m paper run
+
+[`config.paper-run.yaml`](config.paper-run.yaml) is the configuration for a long forward test of
+`btc15m_favorite` alone: fixed 50 contracts, `max_spot_age_s: 5`, a $10,000 paper balance, the
+profit sweep off, no daily loss stops, the other strategies, the market scanner and the Coinbase
+venue off, and every log row kept (`engine.keep_log_rows: 0`). The header of the file says why
+each choice matters for the measurement. `deploy/deploy-smol.sh` installs it as `config.yaml`
+(keeping the old one as `config.yaml.bak.<time>`), runs `./deploy.sh up`, waits for
+`/api/health` and then **checks the running instance**: only `btc15m_favorite` enabled, the
+params, no daily stops, sweep off, $10,000 balance. A dashboard toggle, a saved risk limit or an
+existing account beat `config.yaml`, so the check reads the live values and prints the `curl`
+that fixes each mismatch. `deploy/deploy-smol.sh verify` only checks. What the research data shows, the
+power of the run, and its proposed pass/stop rules are in
+[`research/paper_run/PREREGISTRATION.md`](research/paper_run/PREREGISTRATION.md);
+`research/paper_run/data_review.py` recomputes its tables.
 
 ## Quickstart (without Docker)
 
@@ -359,7 +381,7 @@ Settings come from `config.yaml`, or from `--config PATH` / `$KALSHIBOT_CONFIG`.
 |---|---|
 | `kalshi` | API base URL, client-side rate limit `max_rps` (keep it **≤ 3**: the public limit is shared per IP), timeout |
 | `account` | `starting_balance` |
-| `engine` | `autostart`, job intervals (`tick_s`, `order_poll_s`, …), the Markets-page window `scanner_days_to_close` |
+| `engine` | `autostart`, job intervals (`tick_s`, `order_poll_s`, …), the Markets-page window `scanner_days_to_close`, `keep_log_rows` (rows kept in `logs` and `signals`, default 50,000; 0 = never prune) |
 | `paper` | Consumed-liquidity TTL, default resting-order expiry, fee rounding precision, simulated order latency, trade-tape reads per pass |
 | `risk` | Per-market / per-event / total / per-strategy exposure limits, cash reserve, order rate (per strategy), daily loss limit (trips the kill switch until the next UTC day), close-time and spread guards, Kelly fraction |
 | `strategies` | `<name>: {enabled, params, max_allocation_pct, daily_loss_limit}` (see [Strategies](#strategies)) |
@@ -374,7 +396,8 @@ example `KALSHIBOT_KALSHI__MAX_RPS=2` or `KALSHIBOT_SERVER__PORT=9000`.
 At runtime:
 
 - Risk limits and strategy parameters can be changed from the dashboard. The changes are
-  stored in the database and override the config.
+  stored in the database and override the config (as do strategy toggles, and, once the
+  account exists, its starting balance and profit sweep).
 - Engaging the kill switch blocks new entries and cancels every resting order. The daily
   loss limit engages it automatically and releases it at the next UTC day; a manual kill
   switch stays on until you release it.

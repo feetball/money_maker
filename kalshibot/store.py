@@ -918,9 +918,13 @@ class Store:
                  "message": r["message"], "data": _loads(r["data"])} for r in self._all(sql, params)]
 
     def prune(self, table: str, keep_last: int) -> int:
-        """Delete all but the newest ``keep_last`` rows of logs/signals/equity_snapshots (disk hygiene)."""
+        """Delete all but the newest ``keep_last`` rows of logs/signals/equity_snapshots (disk hygiene).
+
+        ``keep_last <= 0`` means keep everything (it never deletes a whole table); returns 0."""
         if table not in ("logs", "signals", "equity_snapshots"):
             raise ValueError(f"prune not allowed for {table}")
+        if keep_last <= 0:
+            return 0
         with self.transaction():
             cur = self._conn.execute(
                 f"DELETE FROM {table} WHERE id <= (SELECT COALESCE(MAX(id), 0) FROM {table}) - ?", (keep_last,))

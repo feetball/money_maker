@@ -29,7 +29,7 @@ def st(i: int, pnl: str, *, count: int = 1, strategy: str = "s1", event: str | N
     p = D(pnl)
     return Settlement(id=i, ticker=f"KX-{i}", result="yes" if kind == "settlement" else "closed", side="yes",
                       count=count, payout=D(payout) if payout is not None else (D(count) if p > 0 else D(0)),
-                      cost_basis=D("0.5") * count, pnl=p, ts=T0 + timedelta(hours=i), strategy=strategy,
+                      cost_basis=D("0.5") * count, pnl=p, ts=T0 + timedelta(days=i), strategy=strategy,
                       event_ticker=event or f"EV-{i}", kind=kind, fees=D(fees),
                       expected_edge=D(ee) if ee is not None else None, fair_value=fv)
 

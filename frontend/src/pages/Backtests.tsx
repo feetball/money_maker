@@ -209,7 +209,7 @@ function BacktestList({ list }: { list: BacktestSummary[] }) {
           key: "ev",
           header: "EV / ct",
           align: "right",
-          title: "Mean P&L per contract (95% CI clustered by event)",
+          title: "Mean P&L per contract (95% CI clustered by UTC day)",
           sortValue: (b) => metric(b, "ev_per_contract"),
           render: (b) => {
             const lo = metric(b, "ev_ci_low");
@@ -283,7 +283,7 @@ const KNOWN_METRICS: {
       const lo = num(m, "ev_ci_low");
       const hi = num(m, "ev_ci_high");
       return lo !== null && hi !== null
-        ? `95% CI ${fmtCents(lo, { sign: true, dp: 2 })} to ${fmtCents(hi, { sign: true, dp: 2 })} · clustered by event`
+        ? `95% CI ${fmtCents(lo, { sign: true, dp: 2 })} to ${fmtCents(hi, { sign: true, dp: 2 })} · clustered by UTC day`
         : "no confidence interval reported";
     },
   },

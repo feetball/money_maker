@@ -1,0 +1,53 @@
+# kalshibot configuration for the btc15m_favorite PAPER run (see HANDOFF.md, docs/ARCHITECTURE.md).
+# PAPER TRADING ONLY (no real orders, no API credentials).
+#
+# Install it with deploy/deploy-smol.sh (copies it to config.yaml, starts the container and then
+# checks through the API that these values took effect), or by hand:  cp config.paper-run.yaml config.yaml
+#
+# What the run measures: one rule, frozen, at a fixed size, through good and bad days. So:
+#   * only btc15m_favorite trades. The side strategies' daily limits add up to $195, above the
+#     account's $150 kill switch, and they share the 3 req/s budget with the one that matters;
+#   * fixed 50 contracts. Kelly sizing is decorative here (the $50 cap always binds);
+#   * the profit sweep is OFF. With the default 100% it moves every win out of the equity that sizes
+#     orders while losses stay in, so the equity only falls and a percentage cap shrinks the 50-lot
+#     to nothing within weeks;
+#   * no daily loss stops (account or strategy): they would drop the rest of exactly the bad-regime
+#     days the run has to measure. The $10,000 balance is play money and the exposure caps still apply;
+#   * every window's skip or trade record is kept (engine.keep_log_rows: 0).
+#
+# Values the dashboard saved to the database beat this file: strategy toggles and params
+# (strategy_state), risk limits (PATCH /api/risk), and the account (starting balance, profit sweep)
+# once it exists. deploy/deploy-smol.sh therefore checks the running values, not this file.
+
+account:
+  starting_balance: 10000
+  profit_sweep_enabled: false
+  profit_sweep_pct: 0
+
+engine:
+  scanner_days_to_close: 0     # no Markets-page baseline: only what btc15m asks for (KXBTC15M)
+  keep_log_rows: 0             # never prune logs/signals
+
+risk:
+  daily_loss_limit: 0          # 0 = no account-wide daily stop
+
+strategies:
+  btc15m_favorite:
+    enabled: true
+    daily_loss_limit: 0        # 0 = no daily stop for this strategy
+    params:
+      sizing: fixed
+      contracts: 50
+      max_spot_age_s: 5        # the decision fetches the spot fresh; a quote older than 5 s is skipped
+  alt15m_stale:
+    enabled: false
+  ladder_favorite:
+    enabled: false
+  maker_favorite:
+    enabled: false
+  no_basket_arb:
+    enabled: false
+
+# The Coinbase spot venue is a second, separate paper account: off.
+coinbase:
+  enabled: false

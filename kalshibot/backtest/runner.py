@@ -71,7 +71,7 @@ from typing import Any
 
 import numpy as np
 
-from kalshibot.analytics import bootstrap_ratio_ci, drawdown
+from kalshibot.analytics import bootstrap_ratio_ci, day_clusters, drawdown
 from kalshibot.backtest.data import (
     BacktestDataError,
     ReplayDataset,
@@ -821,6 +821,9 @@ def compute_metrics(trades: list[dict[str, Any]], curve: list[dict[str, Any]], *
     pnl = np.asarray([x["pnl"] for x in t], dtype=float)
     cnt = np.asarray([x["count"] for x in t], dtype=float)
     ev_cl = [x.get("event_ticker") or x["ticker"] for x in t]
+    # CIs resample UTC days (an event belongs to the day of its earliest entry ``ts``): one market
+    # regime moves all of a day's events together, and 15-minute windows are an event each
+    day_cl = day_clusters(ev_cl, [x.get("ts") for x in t])
     contracts = float(cnt.sum())
     m: dict[str, Any] = {
         "total_pnl": round(final_equity - starting_balance, 4),
@@ -835,8 +838,8 @@ def compute_metrics(trades: list[dict[str, Any]], curve: list[dict[str, Any]], *
     }
     if n:
         per = pnl / cnt
-        lo, hi = bootstrap_ratio_ci(pnl, cnt, ev_cl, n_boot=n_boot, seed=seed)
-        tlo, thi = bootstrap_ratio_ci(per, None, ev_cl, n_boot=n_boot, seed=seed)
+        lo, hi = bootstrap_ratio_ci(pnl, cnt, day_cl, n_boot=n_boot, seed=seed)
+        tlo, thi = bootstrap_ratio_ci(per, None, day_cl, n_boot=n_boot, seed=seed)
         edge = [(x["expected_edge"], x["count"]) for x in t if x.get("expected_edge") is not None]
         m.update({
             "ev_per_contract": round(float(pnl.sum() / contracts), 6),
