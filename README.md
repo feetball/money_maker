@@ -51,8 +51,8 @@ directory, so they survive rebuilds and restarts. The container restarts automat
 | `./deploy.sh shell` | Shell inside the running container |
 
 - **Port / exposure:** `KALSHIBOT_PORT=9000 ./deploy.sh up` changes the host port. The port
-  is bound to `127.0.0.1` by default; `KALSHIBOT_BIND=0.0.0.0` exposes it on the network,
-  but the dashboard has **no authentication**, so only do that on a trusted network.
+  is bound to `0.0.0.0` (all interfaces) by default; `KALSHIBOT_BIND=127.0.0.1` keeps it local.
+  The dashboard has **no authentication**, so only expose it on a trusted network.
 - **One writer per account:** `deploy.sh` refuses to start while a native
   `kalshibot serve` is running, because both would use the same paper account in `data/`.
   Stop the native one first (Ctrl-C).

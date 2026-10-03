@@ -12,8 +12,8 @@
 #   ./deploy.sh shell       open a shell in the running container
 #
 # Options (env, or persistently in ./.env): KALSHIBOT_PORT (default 8765),
-# KALSHIBOT_BIND (default 127.0.0.1; 0.0.0.0 = reachable from the network - there is
-# no authentication, so only on a trusted network).
+# KALSHIBOT_BIND (default 0.0.0.0 = reachable from the network - there is
+# no authentication, so only on a trusted network; set 127.0.0.1 for local-only).
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -24,7 +24,7 @@ if [[ -f .env ]]; then
     done < <(grep -E '^[A-Z_]+=' .env)
 fi
 PORT="${KALSHIBOT_PORT:-8765}"
-BIND="${KALSHIBOT_BIND:-127.0.0.1}"
+BIND="${KALSHIBOT_BIND:-0.0.0.0}"
 export KALSHIBOT_PORT="$PORT" KALSHIBOT_BIND="$BIND"
 SERVICE=kalshibot
 
