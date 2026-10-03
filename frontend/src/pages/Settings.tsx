@@ -330,7 +330,6 @@ function AccountReset() {
     const ok = await confirm({
       title: "Reset the Kalshi paper account?",
       danger: true,
-      requireText: "RESET",
       confirmLabel: "Reset Kalshi account",
       body: (
         <>

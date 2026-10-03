@@ -339,7 +339,6 @@ function AccountReset() {
     const ok = await confirm({
       title: "Reset the Coinbase paper account?",
       danger: true,
-      requireText: "RESET COINBASE",
       confirmLabel: "Reset Coinbase account",
       body: (
         <>

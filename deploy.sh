@@ -9,6 +9,8 @@
 #   ./deploy.sh logs        follow logs (Ctrl-C to stop following)
 #   ./deploy.sh backtest …  run a backtest in a one-off container, e.g.
 #                           ./deploy.sh backtest --strategy btc15m_favorite
+#   ./deploy.sh reset [BAL] wipe BOTH paper accounts (Kalshi + Coinbase), no prompts; optional
+#                           new starting balance for both, e.g. ./deploy.sh reset 5000
 #   ./deploy.sh shell       open a shell in the running container
 #
 # Options (env, or persistently in ./.env): KALSHIBOT_PORT (default 8765),
@@ -159,11 +161,22 @@ case "$cmd" in
         # One-off container; no ports, reads research/ and prints the results.
         compose run --rm --no-deps "$SERVICE" kalshibot backtest "$@"
         ;;
+    reset)
+        container_running || die "the container is not running; start it first: ./deploy.sh up"
+        body='{}'
+        [[ -n "${1:-}" ]] && body="{\"starting_balance\": $1}"
+        for path in account/reset coinbase/account/reset; do
+            curl -fsS -m 30 -X POST -H 'Content-Type: application/json' -d "$body" \
+                "http://127.0.0.1:${PORT}/api/${path}" >/dev/null \
+                || die "reset failed: POST /api/${path}"
+            say "reset ${path%%/*} paper account"
+        done
+        ;;
     shell)
         compose exec "$SERVICE" bash
         ;;
     *)
-        sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac
