@@ -614,7 +614,7 @@ class Store:
 
     def save_account(self, *, starting_balance: Decimal, cash: Decimal, realized_pnl: Decimal = ZERO,
                      fees_paid: Decimal = ZERO, reserved_profit: Decimal = ZERO,
-                     profit_sweep_enabled: bool = True, profit_sweep_pct: Decimal = D(100),
+                     profit_sweep_enabled: bool = False, profit_sweep_pct: Decimal = D(100),
                      peak_equity: Decimal | None = None,
                      max_drawdown_pct: Decimal = ZERO, ts: datetime | None = None) -> None:
         now = iso(ts or _now())

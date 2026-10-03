@@ -421,7 +421,7 @@ class PaperBroker:
         self._default_sweep_pct = D(profit_sweep_pct if profit_sweep_pct is not None
                                     else getattr(account, "profit_sweep_pct", 100))
         self._default_sweep_enabled = bool(profit_sweep_enabled if profit_sweep_enabled is not None
-                                           else getattr(account, "profit_sweep_enabled", True))
+                                           else getattr(account, "profit_sweep_enabled", False))
         self._lock = asyncio.Lock()
         self._poll_lock = asyncio.Lock()
         self._listeners: list[Callable[[str, Any], None]] = []

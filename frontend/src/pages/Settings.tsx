@@ -398,7 +398,7 @@ function ProfitSweep() {
   const { data: account, poll: accountPoll } = useLiveAccount();
   const { busy, run } = useAction();
   const [pct, setPct] = useState("");
-  const enabled = account?.profit_sweep_enabled ?? true;
+  const enabled = account?.profit_sweep_enabled ?? false;
   const currentPct = account?.profit_sweep_pct;
   const pctValue = pct.trim() === "" ? currentPct : Number(pct);
   const pctInvalid = pctValue === undefined || !Number.isFinite(pctValue) || pctValue < 0 || pctValue > 100;

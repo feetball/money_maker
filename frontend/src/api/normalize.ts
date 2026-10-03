@@ -247,7 +247,7 @@ export function normAccount(v: unknown): Account {
     fees_paid: num(o.fees_paid),
     reserved_profit: reservedProfit,
     net_worth: numOrNull(o.net_worth) ?? equity + reservedProfit,
-    profit_sweep_enabled: bool(o.profit_sweep_enabled, true),
+    profit_sweep_enabled: bool(o.profit_sweep_enabled, false),
     profit_sweep_pct: num(o.profit_sweep_pct, 100),
     total_pnl: num(o.total_pnl),
     total_return_pct: num(o.total_return_pct),
@@ -301,7 +301,7 @@ export function normAccountPartial(v: unknown): Partial<Account> {
     const w = fraction(o.win_rate);
     if (w !== null || o.win_rate === null) out.win_rate = w;
   }
-  if ("profit_sweep_enabled" in o) out.profit_sweep_enabled = bool(o.profit_sweep_enabled, true);
+  if ("profit_sweep_enabled" in o) out.profit_sweep_enabled = bool(o.profit_sweep_enabled, false);
   const t = ts(o.ts);
   if (t) out.ts = t;
   return out;

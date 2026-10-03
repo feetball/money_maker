@@ -122,7 +122,7 @@ async def test_void_pays_no_holders_one_minus_value_and_floors(broker, md):
 async def test_profit_sweep_moves_realized_gains_out_of_cash(md, clock):
     """``AccountSettings.profit_sweep_pct``: winning settlements/closes keep cash flat and move
     the gain to ``reserved_profit`` instead, so it is never put back in the tradeable pool."""
-    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, profit_sweep_enabled=True, clock=clock)
     await b.place_order(buy(A, "yes", "0.40", 10))  # cost 4.00, fee .17
     finalize(md, A, "yes", "1.0000")  # payout 10.00, pnl 10 - 4.17 = 5.83 (profit)
     [s] = await b.check_settlements()
@@ -138,7 +138,7 @@ async def test_profit_sweep_moves_realized_gains_out_of_cash(md, clock):
 
 
 async def test_profit_sweep_leaves_losses_in_cash(md, clock):
-    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, profit_sweep_enabled=True, clock=clock)
     await b.place_order(buy(A, "yes", "0.40", 10))  # cost 4.00, fee .17
     finalize(md, A, "no", "0.0000")  # payout 0, pnl -4.17 (loss)
     [s] = await b.check_settlements()

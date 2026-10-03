@@ -125,7 +125,7 @@ class AccountSettings(_Section):
     profit_sweep_pct: float = Field(100, ge=0, le=100)
     #: on/off switch for the sweep, independent of ``profit_sweep_pct`` (so turning it off keeps the
     #: configured %). Live-adjustable via ``PATCH /api/account``.
-    profit_sweep_enabled: bool = True
+    profit_sweep_enabled: bool = False
 
 
 class EngineSettings(_Section):

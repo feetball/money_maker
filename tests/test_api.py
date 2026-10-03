@@ -339,7 +339,7 @@ def test_account_reset_stops_engine_and_wipes(api: Any) -> None:
 def test_account_profit_sweep_toggle_and_withdraw(api: Any) -> None:
     c, svc, _ = api
     d = c.get("/api/account").json()
-    assert d["profit_sweep_enabled"] is True and d["profit_sweep_pct"] == 0  # test settings: sweep off by default
+    assert d["profit_sweep_enabled"] is False and d["profit_sweep_pct"] == 0  # test settings: sweep and pct 0 by default
 
     r = c.patch("/api/account", json={"profit_sweep_enabled": False})
     assert r.status_code == 200 and r.json()["profit_sweep_enabled"] is False and r.json()["profit_sweep_pct"] == 0

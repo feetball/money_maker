@@ -14,6 +14,7 @@ kalshi:
 
 account:
   starting_balance: 1000  # paper cash at start / after reset
+  profit_sweep_enabled: false   # sweep is off by default; toggle live in Settings or PATCH /api/account
   profit_sweep_pct: 100   # % of each trade's profit set aside as reserved_profit instead of staying tradeable
 
 engine:

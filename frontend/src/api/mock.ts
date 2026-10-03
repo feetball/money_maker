@@ -556,7 +556,7 @@ function buildState(now: number, startingBalance = 1000, empty = false): MockSta
     realizedExtra: 0,
     feesPaid: 0,
     reservedProfit: 0,
-    profitSweepEnabled: true,
+    profitSweepEnabled: false,
     profitSweepPct: 100,
     cashAdjustment: 0,
     risk: {
