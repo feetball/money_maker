@@ -2,6 +2,11 @@
 data/
 config.yaml
 
+# live-trading credentials (Kalshi API private keys)
+*.pem
+*.key
+keys/
+
 # python
 .venv/
 **/.venv/

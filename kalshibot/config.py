@@ -25,10 +25,10 @@ import shutil
 from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer, ValidationError, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer
 
 from kalshibot.money import D
 
@@ -40,9 +40,9 @@ __all__ = [
     "EXAMPLE_CONFIG_PATH",
     "AccountSettings",
     "AnalyticsSettings",
-    "CoinbaseSettings",
     "EngineSettings",
     "KalshiSettings",
+    "LiveSettings",
     "Money",
     "NonNegMoney",
     "PaperSettings",
@@ -52,6 +52,7 @@ __all__ = [
     "StorageSettings",
     "StrategySettings",
     "apply_env_overrides",
+    "apply_live_mode",
     "ensure_config_file",
     "load_settings",
     "resolve_storage_path",
@@ -61,6 +62,8 @@ __all__ = [
 log = logging.getLogger(__name__)
 
 ENV_PREFIX = "KALSHIBOT_"
+#: env keys taken as plain strings, not YAML
+RAW_ENV_KEYS = frozenset({"api_key_id", "private_key_path", "private_key_pem"})
 CONFIG_ENV = "KALSHIBOT_CONFIG"
 DEFAULT_CONFIG_PATH = Path("config.yaml")
 EXAMPLE_CONFIG_PATH = Path("config.example.yaml")
@@ -91,23 +94,6 @@ NonNegMoney = Annotated[Money, Field(ge=0)]
 
 class _Section(BaseModel):
     model_config = ConfigDict(extra="allow", validate_assignment=True)
-
-
-# The Coinbase venue's settings (docs/COINBASE_CONTRACT.md §15). A Coinbase import failure must
-# never stop the Kalshi venue: fall back to a stand-in that keeps the YAML section (as extra
-# keys) and reports the venue as disabled with the reason.
-try:
-    from kalshibot.coinbase.config import CoinbaseSettings
-except Exception as _cb_import_error:  # pragma: no cover - exercised in a subprocess test
-    log.exception("config: Coinbase settings unavailable; Coinbase venue disabled (Kalshi unaffected)")
-    _CB_IMPORT_ERROR = f"coinbase settings unavailable: {type(_cb_import_error).__name__}: {_cb_import_error}"
-
-    class CoinbaseSettings(_Section):  # type: ignore[no-redef]
-        enabled: bool = False
-        load_error: str | None = Field(default=_CB_IMPORT_ERROR, exclude=True)
-
-        def set_resolved_storage_path(self, resolved: str) -> None:
-            pass
 
 
 class KalshiSettings(_Section):
@@ -210,10 +196,48 @@ class AnalyticsSettings(_Section):
 class ServerSettings(_Section):
     host: str = "127.0.0.1"
     port: int = Field(8765, gt=0, lt=65536)
+    #: Host names (besides localhost / 127.0.0.1 / ::1 / ``host``) that may manage API keys from
+    #: the dashboard, e.g. a LAN name if you open it from another machine. Requests addressed to
+    #: any other name are refused, which blocks DNS-rebinding attacks from other websites.
+    allowed_hosts: list[str] = Field(default_factory=list)
 
 
 class StorageSettings(_Section):
     path: str = "data/kalshibot.sqlite3"
+
+
+class LiveSettings(_Section):
+    """LIVE trading on Kalshi with real money (:mod:`kalshibot.live`). Off unless ``enabled``.
+
+    Credentials come from a Kalshi API key: ``api_key_id`` plus the private key, read from
+    ``private_key_path`` or the env var ``KALSHIBOT_LIVE__PRIVATE_KEY_PEM`` (never written back
+    to a config file)."""
+
+    enabled: bool = False
+    #: ``demo`` (demo-api.kalshi.co, fake money) or ``prod`` (real money). Market data is read
+    #: from the same environment, overriding ``kalshi.base_url``.
+    environment: Literal["demo", "prod"] = "demo"
+    api_key_id: str = ""
+    private_key_path: str = ""
+    private_key_pem: str = Field("", exclude=True, repr=False)
+    #: API keys entered in the dashboard (owner-only file; see kalshibot/live/secrets.py). Keys in
+    #: ``api_key_id``/``private_key_*`` above win over it.
+    secrets_path: str = "data/secrets/kalshi-keys.json"
+    #: the live ledger has its own database (paper history stays in ``storage.path``)
+    storage_path: str = "data/kalshibot-live.sqlite3"
+    #: hard caps per order, checked after the risk manager; larger orders are rejected
+    max_order_contracts: int = Field(100, ge=1)
+    max_order_cost: NonNegMoney = D(100)
+    #: how taker (``ioc``) intents are sent: ``fill_or_kill`` (whole order or nothing; never a
+    #: fractional fill) or ``immediate_or_cancel`` (partial fills, possibly fractional)
+    taker_time_in_force: Literal["fill_or_kill", "immediate_or_cancel"] = "fill_or_kill"
+    #: start the engine with the server in live mode (``engine.autostart`` is ignored when live)
+    autostart: bool = False
+    read_rps: float = Field(10, gt=0)
+    write_rps: float = Field(5, gt=0)
+    client_order_prefix: str = Field("kb", min_length=1, max_length=16)
+    #: trade in this Kalshi subaccount (None = primary)
+    subaccount: int | None = Field(None, ge=0, le=63)
 
 
 class Settings(_Section):
@@ -229,25 +253,10 @@ class Settings(_Section):
     feeds: dict[str, Any] = Field(default_factory=dict)
     server: ServerSettings = Field(default_factory=ServerSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
-    #: The separate Coinbase spot PAPER venue (docs/COINBASE_CONTRACT.md §15). Optional in
-    #: the YAML; an invalid section disables only Coinbase (see ``_coinbase_isolated``).
-    coinbase: CoinbaseSettings = Field(default_factory=CoinbaseSettings)
+    live: LiveSettings = Field(default_factory=LiveSettings)
 
     #: File the settings were loaded from (None = defaults only). Not part of the YAML.
     config_path: Path | None = Field(default=None, exclude=True)
-
-    @field_validator("coinbase", mode="wrap")
-    @classmethod
-    def _coinbase_isolated(cls, v: Any, handler: Any) -> CoinbaseSettings:
-        """A bad ``coinbase:`` section must never stop the Kalshi venue: fall back to a
-        disabled Coinbase venue whose ``load_error`` says why."""
-        try:
-            return handler(v)
-        except ValidationError as e:
-            reason = "; ".join(
-                f"{'.'.join(str(p) for p in err['loc']) or 'coinbase'}: {err['msg']}" for err in e.errors())
-            log.error("config: invalid coinbase section; Coinbase venue disabled (Kalshi unaffected): %s", reason)
-            return CoinbaseSettings(enabled=False, load_error=f"invalid coinbase config: {reason}")
 
     def strategy(self, name: str) -> StrategySettings:
         """Settings for strategy ``name`` (defaults if not configured)."""
@@ -280,7 +289,8 @@ def apply_env_overrides(data: dict[str, Any], env: Mapping[str, str] | None = No
                 nxt = {}
                 node[p] = nxt
             node = nxt
-        node[parts[-1]] = _parse_env_value(env[key])
+        # credentials stay verbatim (YAML parsing would fold a PEM's newlines into spaces)
+        node[parts[-1]] = env[key] if parts[-1] in RAW_ENV_KEYS else _parse_env_value(env[key])
     return data
 
 
@@ -324,10 +334,22 @@ def load_settings(
     settings.config_path = cfg_path
     if cfg_path is not None:
         settings.storage.path = resolve_storage_path(settings.storage.path, cfg_path)
-        cb_path = getattr(settings.coinbase, "storage_path", None)
-        if isinstance(cb_path, str):
-            settings.coinbase.set_resolved_storage_path(resolve_storage_path(cb_path, cfg_path))
+        settings.live.secrets_path = resolve_storage_path(settings.live.secrets_path, cfg_path)
+    if settings.live.enabled:
+        apply_live_mode(settings, cfg_path)
     _warn_unknown(settings)
+    return settings
+
+
+def apply_live_mode(settings: Settings, config_path: str | os.PathLike[str] | None = None) -> Settings:
+    """Live mode: the ledger lives in ``live.storage_path`` and market data comes from the
+    live environment's API (demo markets differ from production ones)."""
+    from kalshibot.kalshi.trading import base_url_for
+
+    settings.storage.path = resolve_storage_path(settings.live.storage_path, config_path)
+    settings.kalshi.base_url = base_url_for(settings.live.environment)
+    if settings.live.private_key_path and config_path is not None and not settings.live.private_key_pem:
+        settings.live.private_key_path = resolve_storage_path(settings.live.private_key_path, config_path)
     return settings
 
 

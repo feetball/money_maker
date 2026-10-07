@@ -1,8 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useResolvedVenue } from "../lib/venueScope";
 import { Icon } from "./Icon";
 import { EmptyState } from "./ui";
-import { VenueBadge, VENUES, type Venue } from "./Venue";
 
 export interface Column<T> {
   key: string;
@@ -31,7 +29,6 @@ export function DataTable<T>({
   rowClassName,
   caption,
   pageSize = 200,
-  venue: venueProp,
 }: {
   columns: Column<T>[];
   rows: readonly T[];
@@ -45,14 +42,7 @@ export function DataTable<T>({
   caption?: string;
   /** Rows rendered before a "show more" button. */
   pageSize?: number;
-  /**
-   * Paper account every row belongs to: adds a leading "Venue" column with a
-   * VenueBadge per row (COINBASE_CONTRACT §14). Omitted = the enclosing VenueScope;
-   * null = no venue column (e.g. a table that already shows a per-row venue).
-   */
-  venue?: Venue | null;
 }) {
-  const venue = useResolvedVenue(venueProp);
   const [sort, setSort] = useState<SortState>(defaultSort);
   const [shown, setShown] = useState(pageSize);
 
@@ -86,10 +76,10 @@ export function DataTable<T>({
   if (rows.length === 0) return <>{empty ?? <EmptyState title="No rows" />}</>;
 
   const visible = sorted.slice(0, shown);
-  const label = venue && caption ? `${VENUES[venue].name} · ${caption}` : (caption ?? "Table");
+  const label = caption ?? "Table";
   return (
     <div
-      className={venue ? `table-wrap venue-${venue}` : "table-wrap"}
+      className="table-wrap"
       style={{ maxHeight: maxHeight === "none" ? undefined : maxHeight }}
       tabIndex={0}
       role="region"
@@ -99,11 +89,6 @@ export function DataTable<T>({
         {caption && <caption className="sr-only">{label}</caption>}
         <thead>
           <tr>
-            {venue && (
-              <th scope="col" className="col-venue" title="Paper account this row belongs to">
-                <span className="sr-only">Venue</span>
-              </th>
-            )}
             {columns.map((c) => {
               const active = sort?.key === c.key;
               const ariaSort = active ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined;
@@ -132,14 +117,6 @@ export function DataTable<T>({
         <tbody>
           {visible.map((r, i) => (
             <tr key={rowKey(r, i)} className={rowClassName?.(r)}>
-              {venue && (
-                <td className="col-venue">
-                  {/* Every row on a venue page is the same venue (the banner, caption and
-                      aria label name it), so the cell is the monogram only; the name
-                      stays for screen readers and in the tooltip. */}
-                  <VenueBadge venue={venue} compact />
-                </td>
-              )}
               {columns.map((c) => (
                 <td key={c.key} className={`${c.align ? `al-${c.align}` : ""}${c.className ? ` ${c.className}` : ""}`}>
                   {c.render(r)}

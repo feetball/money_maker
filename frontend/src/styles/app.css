@@ -186,6 +186,29 @@ kbd {
   width: 13px;
   height: 13px;
 }
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--bad-text);
+  background: var(--bad-bg);
+  color: var(--bad-text);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  cursor: help;
+}
+.live-badge-prod {
+  background: var(--bad-text);
+  color: var(--bg, #fff);
+}
+.live-badge .icon {
+  width: 13px;
+  height: 13px;
+}
 .mock-badge {
   padding: 2px 7px;
   border: 1px dashed var(--border-strong);
@@ -1798,19 +1821,6 @@ dl.kv-grid dd {
   .kpi-hero {
     grid-column: 1 / -1;
   }
-  /* KPI tiles: monogram-only venue badge (the page banner names the venue) */
-  .venue-badge.venue-badge-phone-compact {
-    gap: 0 !important;
-    padding: 1px !important;
-  }
-  .venue-badge-phone-compact .venue-badge-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
   .kpi-value {
     font-size: 17px;
   }
@@ -1850,363 +1860,51 @@ dl.kv-grid dd {
   .pill,
   .badge,
   .paper-badge,
+  .live-badge,
   .side {
     border: 1px solid CanvasText;
   }
 }
 
-/* ---------------------------------------------------------------- venues */
-/*
- * Two separate paper venues (docs/COINBASE_CONTRACT.md §14). Venue colours come from
- * --venue-kalshi* / --venue-coinbase* (tokens.css) and always sit next to a text label
- * (VenueBadge), never alone. `.venue-kalshi` / `.venue-coinbase` set --vc / --vc-bg /
- * --vc-text so the rules below are written once for both venues.
- */
-.venue-kalshi {
-  --vc: var(--venue-kalshi);
-  --vc-bg: var(--venue-kalshi-bg);
-  --vc-text: var(--venue-kalshi-text);
-}
-.venue-coinbase {
-  --vc: var(--venue-coinbase);
-  --vc-bg: var(--venue-coinbase-bg);
-  --vc-text: var(--venue-coinbase-text);
-}
-
-/* top bar: one engine pill per venue, each labeled with its badge and linking to it */
-.venue-status {
+/* ---------------------------------------------------------------- engine status / controls */
+/* top bar: engine pill + live-stream indicator */
+.engine-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 8px 2px 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: inherit;
-  text-decoration: none;
   white-space: nowrap;
 }
-.venue-status:hover {
-  border-color: var(--vc);
-  background: var(--row-hover);
-}
-.venue-status .pill {
-  cursor: inherit;
-}
-/* the section you are in */
-.shell.in-venue.venue-kalshi .venue-status.venue-kalshi,
-.shell.in-venue.venue-coinbase .venue-status.venue-coinbase {
-  border-color: var(--vc);
-  box-shadow: inset 0 0 0 1px var(--vc);
-}
 
-/* side nav: Overview, then one group per venue headed by its badge */
-.sidenav ul.nav-root {
-  gap: 2px;
+/* engine controls (Start/Stop, kill switch) at the top of every page */
+.engine-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
-.nav-group {
-  margin-top: 10px;
-  padding: 6px 2px 4px;
-  border-left: 3px solid transparent;
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-.nav-group-head {
-  display: block;
-  padding: 2px 2px 6px;
-  border-radius: var(--radius);
-  text-decoration: none;
-}
-.nav-group-head:hover .venue-badge {
-  filter: brightness(1.12);
-}
-.nav-group.is-active {
-  border-left-color: var(--vc);
-  background: color-mix(in srgb, var(--vc) 7%, transparent);
-}
-.nav-group .nav-link.active {
-  box-shadow: inset 3px 0 0 var(--vc);
-}
-
-/* venue banner (Venue.tsx) with the venue's own engine controls on the right */
-.venue-banner {
-  flex-wrap: wrap;
-  row-gap: 6px;
-}
-.venue-banner .engine-controls {
+.engine-bar .engine-controls {
   gap: 6px;
 }
-.venue-banner .engine-controls .btn {
+.engine-bar .engine-controls .btn {
   height: 28px;
 }
 
-/* KPI tile with a venue badge next to its label */
-.kpi-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 6px;
-}
-.kpi-head .kpi-label {
-  min-width: 0;
-}
-.kpi-head .venue-badge {
-  flex: none;
-}
-.kpi-grid:has(.kpi-venue) {
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-}
-@media (max-width: 640px) {
-  /* same specificity as the rule above, so it must come after it */
-  .kpi-grid:has(.kpi-venue) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* leading "Venue" column of DataTable */
-.table .col-venue {
-  width: 1%;
-  white-space: nowrap;
-}
-
-/* feed rows: [venue] kind ………… time */
-.feed-line {
-  justify-content: flex-start;
-}
-.feed-line > :last-child {
-  margin-left: auto;
-}
-
-/* toasts / dialogs about one venue */
-.toast-venue {
-  margin-bottom: 3px;
-}
-.dialog-venue {
-  margin-bottom: -4px;
-}
-
-/* ------------------------------------------------------------- overview */
-.venue-cards {
+/* ---------------------------------------------------------------- API keys */
+.api-key-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-.venue-card {
-  display: flex;
-  flex-direction: column;
-  border-top: 3px solid var(--vc);
-}
-.vc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 14px 0;
-}
-.vc-title {
-  margin: 0;
-  font-size: inherit;
-  line-height: 1;
-}
-.vc-hero {
-  padding: 12px 14px 0;
-}
-.vc-label,
-.vc-stat dt {
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.vc-equity {
-  margin-top: 2px;
-  font-size: clamp(30px, 3.4vw, 42px);
-  font-weight: 600;
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-}
-.vc-sub {
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-.vc-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  gap: 10px 14px;
-  margin: 14px 14px 0;
-}
-.vc-stat dd {
-  margin: 1px 0 0;
-  font-size: var(--fs-lg);
-  font-weight: 600;
-}
-.vc-error {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px;
-  margin: 12px 14px 0;
-  font-size: var(--fs-sm);
-}
-.vc-error .icon {
-  align-self: center;
-}
-.vc-unavailable {
-  display: flex;
-  align-items: flex-start;
   gap: 10px;
-  margin: 12px 14px 0;
-  padding: 12px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-2);
+  margin: 12px 0;
 }
-.vc-unavailable > .icon {
-  margin-top: 1px;
-  color: var(--serious-text);
+.api-key-form textarea.input {
+  width: 100%;
+  resize: vertical;
 }
-.vc-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: auto;
-  padding: 14px;
+/* a pasted private key is not readable over a shoulder (Chromium/Safari; Firefox shows text) */
+.secret-input {
+  -webkit-text-security: disc;
 }
-.vc-open {
-  border-color: var(--vc);
+.small {
+  font-size: var(--fs-xs);
 }
-.combined {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 28px;
-  padding: 12px 14px;
-}
-.combined-main {
-  min-width: 0;
-}
-.combined-value {
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.combined-note {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-}
-.combined-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  margin: 0;
-}
-.combined-parts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin: 0 0 0 auto;
-  padding: 0;
-  list-style: none;
-}
-.combined-parts li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.combined-plus {
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-/* Overview tables: both venues in one table (pages/OverviewTables.tsx) */
-.ov-notes {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0 14px 10px;
-}
-.ov-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-}
-.ov-note > span:not(.venue-badge) {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-.ov-note-bad > .icon {
-  color: var(--serious-text);
-}
-.ov-note-warn > .icon {
-  color: var(--warn-text);
-}
-.ov-strategy {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-}
-.ov-tags {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.ov-what {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.ov-what > span:first-child {
-  white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  .venue-cards {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* horizontal nav: Overview, then each venue's badge; only the active venue's links */
-  .sidenav ul.nav-root {
-    align-items: center;
-    gap: 6px;
-  }
-  .nav-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin: 0;
-    padding: 2px 4px;
-    border-left: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: var(--radius);
-  }
-  .nav-group.is-active {
-    border-bottom-color: var(--vc);
-  }
-  .nav-group:not(.is-active) > ul {
-    display: none;
-  }
-  .nav-group-head {
-    padding: 2px;
-  }
-  .nav-group .nav-link.active {
-    box-shadow: inset 0 -2px 0 var(--vc);
-  }
-  .combined-parts {
-    margin-left: 0;
-  }
-}
-@media (forced-colors: active) {
-  .venue-badge,
-  .venue-status,
-  .venue-banner {
-    border: 1px solid CanvasText;
-  }
+.api-key-form > .btn {
+  justify-self: start;
 }

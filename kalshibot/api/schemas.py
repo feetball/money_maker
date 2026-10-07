@@ -12,6 +12,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
+    "LiveCredentialsIn",
     "Account",
     "AccountPatch",
     "AccountResetRequest",
@@ -70,10 +71,17 @@ class ExchangeStatus(_Out):
 
 
 class StatusResponse(_Out):
-    mode: Literal["paper"]
+    mode: Literal["paper", "live"]
     engine: EngineStatus
     exchange: ExchangeStatus
     server_time: str
+
+
+class LiveCredentialsIn(_In):
+    """A Kalshi API key from the dashboard. Write-only: never part of any response."""
+
+    api_key_id: str = Field(min_length=1, max_length=128)
+    private_key_pem: str = Field(min_length=1, max_length=16_000, repr=False)
 
 
 class KillSwitchRequest(_In):

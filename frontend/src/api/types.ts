@@ -66,8 +66,66 @@ export interface ExchangeStatus {
   trading_active: boolean | null;
 }
 
+export interface LiveMismatch {
+  ticker: string;
+  ledger: number;
+  exchange: number;
+}
+
+/** Last ledger-vs-exchange comparison (live mode; GET /api/live). */
+export interface LiveExchange {
+  checked_at: IsoDateTime | null;
+  error: string | null;
+  balance: number | null;
+  portfolio_value: number | null;
+  ledger_cash: number | null;
+  /** Kalshi balance minus the ledger's cash (+ reserved profit). */
+  cash_drift: number | null;
+  position_mismatches: LiveMismatch[];
+}
+
+export type KalshiEnv = "demo" | "prod";
+
+/** What the dashboard may know about a stored key (never the key itself). */
+export interface StoredKeyInfo {
+  /** "config" = config.yaml / env vars (cannot be changed here), "dashboard", or null = none. */
+  source: "config" | "dashboard" | null;
+  api_key_id: string | null;
+  fingerprint: string | null;
+  saved_at: IsoDateTime | null;
+}
+
+export interface CredentialsResponse {
+  live_enabled: boolean;
+  environment: KalshiEnv;
+  keys: Record<KalshiEnv, StoredKeyInfo>;
+  secrets_path: string | null;
+  ready: boolean | null;
+  blocked_reason: string | null;
+  /** PUT only: the balance Kalshi reported while verifying the key. */
+  verified_balance: number | null;
+  /** PUT only: the key was swapped into the running live broker. */
+  activated: boolean;
+}
+
+export interface LiveStatus {
+  environment: KalshiEnv;
+  /** false: orders are refused and the engine cannot start (see blocked_reason). */
+  ready: boolean;
+  blocked_reason: string | null;
+  credentials_source: "config" | "dashboard" | null;
+  max_order_contracts: number;
+  max_order_cost: number;
+  taker_time_in_force: string;
+  trader_requests: number;
+  trader_errors: number;
+  exchange: LiveExchange;
+}
+
 export interface StatusResponse {
-  mode: "paper";
+  /** "live": orders go to Kalshi with real (prod) or demo money. */
+  mode: "paper" | "live";
+  live: LiveStatus | null;
   engine: EngineStatus;
   exchange: ExchangeStatus;
   server_time: IsoDateTime;
@@ -684,65 +742,3 @@ export type StreamEvent = {
 }[StreamEventType];
 
 export type StreamConnectionState = "connecting" | "open" | "reconnecting" | "closed";
-
-// ---------------------------------------------------------------------------
-// GET /api/overview (docs/COINBASE_CONTRACT.md §13) — both paper venues side by side
-// ---------------------------------------------------------------------------
-
-export type VenueId = "kalshi" | "coinbase";
-
-/**
- * One venue's summary. Money fields are null when the venue is unavailable (or the
- * backend omitted them) so the UI shows "—", never a misleading "$0.00".
- */
-export interface OverviewVenue {
-  venue: VenueId;
-  /** "KALSHI · prediction markets" / "COINBASE · crypto spot". */
-  label: string;
-  available: boolean;
-  /** Why the venue is unavailable (import error, disabled in config, …); null when available. */
-  unavailable_reason: string | null;
-  engine_running: boolean;
-  kill_switch: boolean;
-  starting_balance: number | null;
-  equity: number | null;
-  cash: number | null;
-  total_pnl: number | null;
-  /** Percentage points. */
-  total_return_pct: number | null;
-  todays_pnl: number | null;
-  open_positions: number | null;
-  fees_paid: number | null;
-  last_error: string | null;
-  /** Backend extra (not in §13): when `last_error` was recorded. */
-  last_error_at: IsoDateTime | null;
-  /** Backend extra (not in §13): the engine's last tick / bar. */
-  last_tick_at: IsoDateTime | null;
-}
-
-export interface OverviewCombined {
-  starting_balance: number | null;
-  equity: number | null;
-  total_pnl: number | null;
-  /** Percentage points. */
-  total_return_pct: number | null;
-  /** Always shown next to the combined figure: "Sum of two separate paper accounts". */
-  note: string;
-}
-
-export interface OverviewEquityPoint {
-  ts: IsoDateTime;
-  equity: number;
-}
-
-export interface OverviewResponse {
-  generated_at: IsoDateTime | null;
-  venues: Record<VenueId, OverviewVenue>;
-  combined: OverviewCombined;
-  equity_series: Record<VenueId, OverviewEquityPoint[]>;
-  /**
-   * Client-side marker: true when the server has no /api/overview (an older backend)
-   * and this payload was assembled from the Kalshi endpoints instead.
-   */
-  synthesized?: boolean;
-}

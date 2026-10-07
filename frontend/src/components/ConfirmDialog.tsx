@@ -1,7 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { useVenueScope } from "../lib/venueScope";
 import { Icon } from "./Icon";
-import { VenueBadge, type Venue } from "./Venue";
 
 export interface ConfirmOptions {
   title: string;
@@ -11,24 +9,13 @@ export interface ConfirmOptions {
   danger?: boolean;
   /** User must type this exact text to enable the confirm button. */
   requireText?: string;
-  /**
-   * Which paper account the action affects (VenueBadge above the title). Omitted = the
-   * enclosing VenueScope of the caller; null = none. Titles should still name the
-   * venue in words ("Stop the Kalshi engine?").
-   */
-  venue?: Venue | null;
 }
 
 type ConfirmFn = (o: ConfirmOptions) => Promise<boolean>;
 
 const ConfirmContext = createContext<ConfirmFn>(async () => false);
 
-/** Confirm dialog; inside a VenueScope the dialog defaults to that venue's badge. */
-export function useConfirm(): ConfirmFn {
-  const confirm = useContext(ConfirmContext);
-  const scope = useVenueScope();
-  return useCallback<ConfirmFn>((o) => confirm(o.venue === undefined && scope ? { ...o, venue: scope } : o), [confirm, scope]);
-}
+export const useConfirm = (): ConfirmFn => useContext(ConfirmContext);
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [req, setReq] = useState<(ConfirmOptions & { resolve: (v: boolean) => void }) | null>(null);
@@ -115,17 +102,12 @@ function ConfirmModal({ opts, onClose }: { opts: ConfirmOptions; onClose: (v: bo
     >
       <form
         method="dialog"
-        className={opts.venue ? `dialog-inner venue-${opts.venue}` : "dialog-inner"}
+        className="dialog-inner"
         onSubmit={(e) => {
           e.preventDefault();
           if (canConfirm) onClose(true);
         }}
       >
-        {opts.venue && (
-          <div className="dialog-venue">
-            <VenueBadge venue={opts.venue} long size="md" />
-          </div>
-        )}
         <h2 id="confirm-title" className="dialog-title">
           {opts.danger && <Icon name="alert" className="tone-neg" />}
           {opts.title}

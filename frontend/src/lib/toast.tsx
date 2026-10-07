@@ -1,7 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../components/Icon";
-import { VenueBadge, type Venue } from "../components/Venue";
-import { useVenueScope } from "./venueScope";
 
 export type ToastKind = "error" | "success" | "info";
 
@@ -13,7 +11,6 @@ interface ToastItem {
   message: string | null;
   count: number;
   ttl: number;
-  venue: Venue | null;
 }
 
 export interface ToastOptions {
@@ -21,11 +18,6 @@ export interface ToastOptions {
   key?: string;
   message?: string;
   ttlMs?: number;
-  /**
-   * Which paper account the toast is about (shown as a VenueBadge). Omitted = the
-   * enclosing VenueScope of the component that called useToast(); null = none.
-   */
-  venue?: Venue | null;
 }
 
 export interface ToastApi {
@@ -38,24 +30,7 @@ export interface ToastApi {
 const noop = () => undefined;
 const ToastContext = createContext<ToastApi>({ error: noop, success: noop, info: noop, dismiss: noop });
 
-/**
- * Toast API. Inside a VenueScope, toasts default to that venue (badge + label) unless
- * the call passes `venue` explicitly (null = no venue, e.g. "Backend unreachable").
- */
-export function useToast(): ToastApi {
-  const api = useContext(ToastContext);
-  const scope = useVenueScope();
-  return useMemo<ToastApi>(() => {
-    if (!scope) return api;
-    const withVenue = (o?: ToastOptions): ToastOptions => (o && "venue" in o ? o : { ...o, venue: scope });
-    return {
-      error: (t, o) => api.error(t, withVenue(o)),
-      success: (t, o) => api.success(t, withVenue(o)),
-      info: (t, o) => api.info(t, withVenue(o)),
-      dismiss: api.dismiss,
-    };
-  }, [api, scope]);
-}
+export const useToast = (): ToastApi => useContext(ToastContext);
 
 const MAX_TOASTS = 5;
 
@@ -73,11 +48,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       if (existing) {
         return xs.map((x) =>
           x === existing
-            ? { ...x, kind, title, message: opts.message ?? null, count: x.count + 1, ttl, id: nextId.current++, venue: opts.venue ?? null }
+            ? { ...x, kind, title, message: opts.message ?? null, count: x.count + 1, ttl, id: nextId.current++ }
             : x,
         );
       }
-      const item: ToastItem = { id: nextId.current++, key, kind, title, message: opts.message ?? null, count: 1, ttl, venue: opts.venue ?? null };
+      const item: ToastItem = { id: nextId.current++, key, kind, title, message: opts.message ?? null, count: 1, ttl };
       return [...xs, item].slice(-MAX_TOASTS);
     });
   }, []);
@@ -122,11 +97,6 @@ function ToastView({ item, onClose }: { item: ToastItem; onClose: (id: number) =
     >
       <Icon name={icon} className="toast-icon" />
       <div className="toast-body">
-        {item.venue && (
-          <div className="toast-venue">
-            <VenueBadge venue={item.venue} />
-          </div>
-        )}
         <div className="toast-title">
           {item.title}
           {item.count > 1 && <span className="toast-count"> ×{item.count}</span>}

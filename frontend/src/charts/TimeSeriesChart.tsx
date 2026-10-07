@@ -13,7 +13,6 @@ import {
 } from "recharts";
 import { fmtAbsolute, fmtUsd, fmtUsdTick } from "../lib/format";
 import { ChartFrame, TooltipCard, type LegendItem, type TooltipRow } from "./ChartFrame";
-import { useVenueChartColors, useVenueScope } from "../lib/venue";
 import { baselineAxisLabel, baselineLow, ticksClearOfBaseline } from "./baseline";
 import { fmtTimeTick, niceTicks, tickDomain, timeTicks, useChartColors } from "./palette";
 
@@ -53,11 +52,7 @@ export function TimeSeriesChart({
   toolbar?: ReactNode;
 }) {
   const c = useChartColors();
-  // Inside a venue's pages the primary line is that venue's colour (as on the Overview),
-  // never P&L blue (contract §14).
-  const venue = useVenueScope();
-  const vc = useVenueChartColors();
-  const primary = venue ? vc[venue] : c.series1;
+  const primary = c.series1;
   const color = (s: SeriesSpec) => (s.role === "primary" ? primary : c.deemph);
 
   // Points without a usable time are skipped (never plotted at NaN).

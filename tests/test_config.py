@@ -1,5 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -36,7 +37,8 @@ def test_defaults_without_file(tmp_path, monkeypatch):
 def test_example_file_matches_defaults():
     raw = yaml.safe_load(EXAMPLE.read_text())
     assert set(raw) == {"kalshi", "account", "engine", "paper", "risk", "strategies", "analytics", "server",
-                        "storage"}
+                        "storage", "live"}
+    assert raw["live"]["enabled"] is False  # the shipped example never trades real money
     # the shipped strategies, each spelled out as enabled (their built-in default, see
     # tests/test_integration_defaults.py) with every parameter left at the code's default
     names = ["btc15m_favorite", "ladder_favorite", "maker_favorite", "no_basket_arb"]
@@ -44,7 +46,7 @@ def test_example_file_matches_defaults():
     s = load_settings(EXAMPLE, env={})
     assert s.config_path == EXAMPLE
     defaults = Settings()
-    exclude = {"config_path", "storage", "strategies"}
+    exclude: Any = {"config_path": True, "storage": True, "strategies": True, "live": {"secrets_path"}}
     assert s.model_dump(exclude=exclude) == defaults.model_dump(exclude=exclude)
     # the relative default storage path is resolved against the config file's directory
     assert Path(s.storage.path) == (EXAMPLE.parent / defaults.storage.path).resolve()

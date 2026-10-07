@@ -47,7 +47,3 @@ strategies:
     enabled: false
   no_basket_arb:
     enabled: false
-
-# The Coinbase spot venue is a second, separate paper account: off.
-coinbase:
-  enabled: false

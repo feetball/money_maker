@@ -486,12 +486,11 @@ def test_paper_run_config_loads_without_unknown_keys(caplog: pytest.LogCaptureFi
 
     with caplog.at_level("WARNING"):
         s = load_settings(PAPER_RUN, env={})
-    assert "unknown key" not in caplog.text and s.coinbase.load_error in (None, "")
+    assert "unknown key" not in caplog.text
     assert s.account.starting_balance == 10_000
     assert s.account.profit_sweep_enabled is False and s.account.profit_sweep_pct == 0
     assert s.risk.daily_loss_limit == 0  # no account-wide daily stop
     assert s.engine.scanner_days_to_close == 0 and s.engine.keep_log_rows == 0
-    assert s.coinbase.enabled is False
     on = {n for n, c in s.strategies.items() if c.enabled}
     assert on == {"btc15m_favorite"}
     btc = s.strategies["btc15m_favorite"]

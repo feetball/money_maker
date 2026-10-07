@@ -126,7 +126,7 @@ function PositionsSection() {
             ]}
             footer={
               <tr className="totals">
-                {/* 8 data columns + the leading Venue column DataTable adds for venue="kalshi". */}
+                {/* 9 data columns before Cost. */}
                 <td colSpan={9}>Total ({rows.length})</td>
                 <td className="al-right">
                   <Usd value={tot.cost} />

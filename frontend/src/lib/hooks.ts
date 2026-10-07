@@ -233,11 +233,9 @@ export function usePolling<T>(fetcher: (signal: AbortSignal) => Promise<T>, opts
         if (!failing.current && labelRef.current && !silent) {
           // Unreachable backend: every poll fails at once, so collapse into one toast.
           const offline = isUnreachable(e);
-          // "Backend unreachable" is about the whole server (both venues): no venue badge.
           toastRef.current.error(offline ? "Backend unreachable" : `Couldn't load ${labelRef.current}`, {
             key: offline ? NETWORK_TOAST : toastKey.current,
             message: errorMessage(e),
-            ...(offline ? { venue: null } : {}),
           });
         }
         failing.current = true;

@@ -28,10 +28,6 @@ import type {
   MarketRow,
   Order,
   OrderAction,
-  OverviewCombined,
-  OverviewEquityPoint,
-  OverviewResponse,
-  OverviewVenue,
   OrderStatus,
   ParamSpec,
   ParamValue,
@@ -44,11 +40,13 @@ import type {
   Signal,
   SignalDecision,
   StatusResponse,
+  LiveStatus,
+  CredentialsResponse,
+  StoredKeyInfo,
   Strategy,
   StrategyStats,
   TickEvent,
   TimeInForce,
-  VenueId,
 } from "./types";
 
 export type Raw = Record<string, unknown>;
@@ -203,12 +201,67 @@ function list<T>(v: unknown, f: (r: Raw) => T): T[] {
 
 // ---------------------------------------------------------------------------
 
+function normKeySource(v: unknown): StoredKeyInfo["source"] {
+  return v === "config" || v === "dashboard" ? v : null;
+}
+
+export function normCredentials(v: unknown): CredentialsResponse {
+  const o = obj(v);
+  const keys = obj(o.keys);
+  const one = (r: Raw): StoredKeyInfo => ({
+    source: normKeySource(r.source),
+    api_key_id: strOrNull(r.api_key_id),
+    fingerprint: strOrNull(r.fingerprint),
+    saved_at: ts(r.saved_at),
+  });
+  return {
+    live_enabled: bool(o.live_enabled),
+    environment: o.environment === "prod" ? "prod" : "demo",
+    keys: { demo: one(obj(keys.demo)), prod: one(obj(keys.prod)) },
+    secrets_path: strOrNull(o.secrets_path),
+    ready: typeof o.ready === "boolean" ? o.ready : null,
+    blocked_reason: strOrNull(o.blocked_reason),
+    verified_balance: numOrNull(o.verified_balance),
+    activated: bool(o.activated),
+  };
+}
+
+export function normLive(v: unknown): LiveStatus {
+  const o = obj(v);
+  const x = obj(o.exchange);
+  return {
+    environment: o.environment === "prod" ? "prod" : "demo",
+    ready: bool(o.ready),
+    blocked_reason: strOrNull(o.blocked_reason),
+    credentials_source: normKeySource(o.credentials_source),
+    max_order_contracts: num(o.max_order_contracts),
+    max_order_cost: num(o.max_order_cost),
+    taker_time_in_force: str(o.taker_time_in_force),
+    trader_requests: num(o.trader_requests),
+    trader_errors: num(o.trader_errors),
+    exchange: {
+      checked_at: ts(x.checked_at),
+      error: strOrNull(x.error),
+      balance: numOrNull(x.balance),
+      portfolio_value: numOrNull(x.portfolio_value),
+      ledger_cash: numOrNull(x.ledger_cash),
+      cash_drift: numOrNull(x.cash_drift),
+      position_mismatches: list(x.position_mismatches, (r) => ({
+        ticker: str(r.ticker),
+        ledger: num(r.ledger),
+        exchange: num(r.exchange),
+      })),
+    },
+  };
+}
+
 export function normStatus(v: unknown): StatusResponse {
   const o = obj(v);
   const e = obj(o.engine);
   const x = obj(o.exchange);
   return {
-    mode: "paper",
+    mode: o.mode === "live" ? "live" : "paper",
+    live: o.mode === "live" && isObj(o.live) ? normLive(o.live) : null,
     engine: {
       running: bool(e.running),
       started_at: ts(e.started_at),
@@ -878,89 +931,3 @@ export const normList = {
   markets: (v: unknown) => list(v, normMarket),
   backtests: (v: unknown) => list(v, normBacktestSummary),
 };
-
-// ---------------------------------------------------------------------------
-// GET /api/overview (COINBASE_CONTRACT §13)
-// ---------------------------------------------------------------------------
-
-export const VENUE_LABELS: Record<VenueId, string> = {
-  kalshi: "KALSHI · prediction markets",
-  coinbase: "COINBASE · crypto spot",
-};
-
-export const COMBINED_NOTE = "Sum of two separate paper accounts";
-
-export function normOverviewVenue(v: unknown, venue: VenueId): OverviewVenue {
-  const o = obj(v);
-  // A venue block without `available` is available when it carries an equity figure
-  // (Kalshi is always available per the contract).
-  const available = "available" in o ? bool(o.available) : venue === "kalshi" || numOrNull(o.equity) !== null;
-  const reason = strOrNull(pick(o, "unavailable_reason", "reason", "error"));
-  return {
-    venue,
-    label: str(o.label) || VENUE_LABELS[venue],
-    available,
-    unavailable_reason: available ? null : (reason ?? "not reported by the server"),
-    engine_running: bool(pick(o, "engine_running", "running")),
-    kill_switch: bool(o.kill_switch),
-    starting_balance: numOrNull(o.starting_balance),
-    equity: numOrNull(o.equity),
-    cash: numOrNull(o.cash),
-    total_pnl: numOrNull(o.total_pnl),
-    total_return_pct: numOrNull(o.total_return_pct),
-    todays_pnl: numOrNull(o.todays_pnl),
-    open_positions: numOrNull(o.open_positions),
-    fees_paid: numOrNull(o.fees_paid),
-    last_error: strOrNull(o.last_error),
-    last_error_at: ts(o.last_error_at),
-    last_tick_at: ts(pick(o, "last_tick_at", "last_bar_at")),
-  };
-}
-
-/** [{ts, equity}] (also {ts, value} or [ts, equity] pairs), oldest first, bad rows dropped. */
-export function normOverviewSeries(v: unknown): OverviewEquityPoint[] {
-  const out: OverviewEquityPoint[] = [];
-  for (const x of arr(v)) {
-    let t: string | null;
-    let e: number | null;
-    if (Array.isArray(x)) {
-      t = ts(x[0]);
-      e = numOrNull(x[1]);
-    } else {
-      const o = obj(x);
-      t = ts(pick(o, "ts", "t", "time"));
-      e = numOrNull(pick(o, "equity", "value"));
-    }
-    if (t && hasTime(t) && e !== null) out.push({ ts: t, equity: e });
-  }
-  return out.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
-}
-
-export function normOverview(v: unknown): OverviewResponse {
-  const o = obj(v);
-  const venues = obj(o.venues);
-  const kalshi = normOverviewVenue(venues.kalshi, "kalshi");
-  const coinbase = normOverviewVenue(venues.coinbase, "coinbase");
-  const c = obj(o.combined);
-  const sum = (k: "starting_balance" | "equity" | "total_pnl"): number | null => {
-    const xs = [kalshi, coinbase].filter((x) => x.available).map((x) => x[k]);
-    return xs.length && xs.every((x) => x !== null) ? xs.reduce<number>((a, b) => a + (b ?? 0), 0) : null;
-  };
-  const combined: OverviewCombined = {
-    starting_balance: numOrNull(c.starting_balance) ?? sum("starting_balance"),
-    equity: numOrNull(c.equity) ?? sum("equity"),
-    total_pnl: numOrNull(c.total_pnl) ?? sum("total_pnl"),
-    total_return_pct: numOrNull(c.total_return_pct),
-    note: str(c.note) || COMBINED_NOTE,
-  };
-  if (combined.total_return_pct === null && combined.total_pnl !== null && combined.starting_balance) {
-    combined.total_return_pct = (combined.total_pnl / combined.starting_balance) * 100;
-  }
-  const series = obj(pick(o, "equity_series", "equity"));
-  return {
-    generated_at: ts(o.generated_at),
-    venues: { kalshi, coinbase },
-    combined,
-    equity_series: { kalshi: normOverviewSeries(series.kalshi), coinbase: normOverviewSeries(series.coinbase) },
-  };
-}

@@ -1,18 +1,15 @@
-# kalshibot — Kalshi paper-trading bot and dashboard
+# kalshibot — Kalshi trading bot and dashboard
 
-kalshibot runs trading strategies against **live Kalshi market data** and fills their
-orders in a **simulated (paper) account**. It is one Python process: a trading engine, a
-REST + Server-Sent-Events API, and a React dashboard to watch and steer it.
+kalshibot runs trading strategies against **live Kalshi market data**. By default it fills
+their orders in a **simulated (paper) account**. With `live.enabled` it sends them to Kalshi
+as **real orders** (see [Live trading](#live-trading)). It is one Python process: a trading
+engine, a REST + Server-Sent-Events API, and a React dashboard to watch and steer it.
 
-A second, fully separate paper venue for **Coinbase spot crypto** runs in the same process
-with its own account. See [Coinbase (crypto spot)](#coinbase-crypto-spot).
-
-> **PAPER TRADING ONLY.** kalshibot never places a real order. It has no code path for
-> real orders and never asks for Kalshi credentials. All market data comes from Kalshi's
-> public, unauthenticated REST API
-> (`https://api.elections.kalshi.com/trade-api/v2`). Every balance, fill, position and
-> P&L figure it shows is simulated. It is not investment advice, and good paper results
-> do not guarantee live results.
+> **Paper by default.** Out of the box kalshibot places no real orders and needs no
+> credentials; market data comes from Kalshi's public REST API
+> (`https://api.elections.kalshi.com/trade-api/v2`). Live trading is opt-in and uses real
+> money on the production exchange. Nothing here is investment advice, and good paper
+> results do not guarantee live results.
 
 The paper broker tries hard not to flatter a strategy:
 
@@ -68,8 +65,8 @@ directory, so they survive rebuilds and restarts. The container restarts automat
 
 [`config.paper-run.yaml`](config.paper-run.yaml) is the configuration for a long forward test of
 `btc15m_favorite` alone: fixed 50 contracts, `max_spot_age_s: 5`, a $10,000 paper balance, the
-profit sweep off, no daily loss stops, the other strategies, the market scanner and the Coinbase
-venue off, and every log row kept (`engine.keep_log_rows: 0`). The header of the file says why
+profit sweep off, no daily loss stops, the other strategies and the market scanner
+off, and every log row kept (`engine.keep_log_rows: 0`). The header of the file says why
 each choice matters for the measurement. `deploy/deploy-smol.sh` installs it as `config.yaml`
 (keeping the old one as `config.yaml.bak.<time>`), runs `./deploy.sh up`, waits for
 `/api/health` and then **checks the running instance**: only `btc15m_favorite` enabled, the
@@ -232,117 +229,8 @@ A backtest shows that the code matches the research. It does not show future pro
 The UI polls the REST API every 5–10 s and applies live events from `GET /api/stream`
 (SSE). After a reconnect, it asks the server to replay the events it missed.
 
-These Kalshi pages live under `/kalshi` (`/kalshi/positions`, …); the old paths redirect
-there. `/` is the **Overview** of both venues, and the Coinbase pages live under `/coinbase`
-(see below).
-
-## Coinbase (crypto spot)
-
-Coinbase spot crypto is a **second, fully separate paper venue**. It runs in the same
-process as Kalshi but shares nothing with it:
-
-- **Own paper account:** its own USD cash (`coinbase.starting_balance`, default $1,000),
-  its own SQLite file (`data/coinbase.sqlite3`), engine, kill switch and risk limits.
-- **Isolated failures:** a Coinbase outage, bad config or crash never stops or slows Kalshi,
-  and Kalshi problems don't affect Coinbase. If the venue can't start, every
-  `/api/coinbase/*` route returns 503 with the reason, and the dashboard shows that reason.
-- **Paper only:** it reads Coinbase Exchange's public, unauthenticated REST API
-  (`https://api.exchange.coinbase.com`). It has no API keys, no auth code and no code path
-  for real orders.
-- **Realistic fills:** the paper broker re-reads the live order book at execution and walks
-  its depth. Sizes are rounded down to the product's `base_increment` and prices to its
-  `quote_increment`. It charges the configured fee tier in USD on every fill. Resting
-  orders fill only from later public trades, behind the displayed queue. Positions are
-  marked at what selling into the bid ladder would return after the taker fee.
-
-The binding spec is [docs/COINBASE_CONTRACT.md](docs/COINBASE_CONTRACT.md). Verified API and
-fee facts are in [docs/coinbase_api_notes.md](docs/coinbase_api_notes.md).
-
-**How venues are labeled in the UI.** Every screen, figure, row, toast and confirm dialog
-names its venue. There is never a figure you have to guess about.
-
-- Kalshi is **teal** and Coinbase is **violet**. These colours are never used for P&L or
-  status.
-- Every venue page starts with a banner naming its venue.
-- KPI tiles and table rows carry a venue badge. On phones the badge shrinks to its
-  monogram, and the full name stays in the tooltip and for screen readers.
-- The top bar has one engine pill per venue.
-- The nav groups links under a Kalshi header and a Coinbase header.
-- Browser tabs read like "Coinbase · Positions — kalshibot".
-- The Overview (`/`) shows one card per venue, a combined total labeled "Sum of two separate
-  paper accounts", and an equity chart with one line per venue.
-- Units differ by venue:
-  - Kalshi: contracts and ¢.
-  - Coinbase: base-currency quantities (`0.00029327 BTC`), USD prices and fees shown as
-    `$0.23 (0.90%)`.
-
-**Config.** The `coinbase:` section of [`config.example.yaml`](config.example.yaml) documents
-every key and its default. A `config.yaml` without that section runs on the defaults, so
-existing configs work unchanged. Main keys:
-
-- `enabled`
-- `max_rps`: default 3. The public limit is 10 req/s per IP, shared with everything else on
-  the host.
-- `starting_balance`
-- `fee_tier`: default `intro`, the US Intro tier at 0.50% maker / 0.90% taker. You can set
-  explicit rates with `fee_rates: {maker, taker}` instead.
-- `storage_path`
-- `paper.*`: slippage cap, consumed-liquidity TTL, GTC expiry, and `fill_on_book_cross`.
-- `engine.*`: `bar_delay_s` (default 60 s after each bar closes), plus maintenance and
-  snapshot intervals.
-- `risk.*`: per-product and total exposure caps, cash reserve, and the daily loss limit
-  (trips the Coinbase kill switch, which blocks buys but still allows sells).
-- `strategies.<name>`: `enabled`, `params` and `max_allocation_pct`.
-
-Environment overrides use the prefix `KALSHIBOT_COINBASE__`, for example
-`KALSHIBOT_COINBASE__ENABLED=false`. To reset only the Coinbase account, use the dashboard
-(`POST /api/coinbase/account/reset`) or `kalshibot coinbase-reset` while the server is
-stopped. Kalshi is not affected.
-
-**Backtests.** Coinbase backtests replay `research/coinbase/data` (daily and hourly candles)
-through the same strategy classes and rebalance planner as the live engine:
-
-- The strategy decides at the bar close and the order fills at the next bar's open.
-- Slippage is half the product's spread (or an estimate from its volume when there is no
-  measured spread), plus the taker fee.
-- Each fill is capped at 10% of the bar's USD volume.
-- Holdings are valued after the exit fee.
-- Results are compared with buy-and-hold BTC and an equal-weight universe, both paying the
-  same fees.
-
-Run one from the Coinbase Backtests page, or from the command line:
-
-```bash
-uv run kalshibot coinbase-backtest --strategy btc_trend --start 2024-01-01
-uv run kalshibot coinbase-backtest --strategy btc_trend --fee-tier intro_pre_2026_09 --save
-```
-
-The result lists the known biases, including the zero-latency fill at the open.
-`--opt fill_price=pessimistic` fills at the worse of the open and the bar's average price.
-
-**Strategies: pending research, none enabled.** Three strategies are registered, and all
-three are **off by default**:
-
-- `btc_hold`: a buy-and-hold benchmark.
-- `btc_trend`: a BTC trend filter.
-- `eth_trend_vt`: experimental.
-
-The research in [research/coinbase/FINDINGS.md](research/coinbase/FINDINGS.md) finds that,
-after US retail fees, **no tested strategy beats simply holding BTC**:
-
-- The trend filters are risk overlays, not an edge. They roughly halve drawdowns but add
-  no return you can rely on.
-- Enable one from the Coinbase Strategies page only to paper-track it. Research is still
-  under way.
-
-**Upgrading a Docker install.** The image contains the code. After pulling the Coinbase
-changes, run `./deploy.sh update`. Restarting or rebooting reuses the old image, which has
-no `/api/overview` or `/api/coinbase/*` routes. If `update` refuses because "a native
-'kalshibot serve' is running" and that pid is the container's own server, rebuild directly:
-
-```bash
-docker compose build && docker compose up -d --force-recreate
-```
+The former `/kalshi/*` paths (`/kalshi/positions`, …) redirect to the same page without
+the prefix.
 
 ## Development
 
@@ -371,6 +259,83 @@ Other CLI commands (`uv run kalshibot --help`):
 | `kalshibot serve [--host H] [--port P] [--storage PATH] [--no-engine]` | Run everything |
 | `kalshibot reset [--starting-balance X] [-y]` | Wipe the paper account; refuses while `serve` holds the database, so use Settings → Reset on a running server |
 | `kalshibot backtest --strategy NAME [--start D] [--end D] [--param K=V] [--fill MODE] [--save]` | Run a backtest from the command line (see [Backtests](#backtests)) |
+
+## Live trading
+
+Live mode sends the same strategies' orders to Kalshi through its authenticated API
+([kalshibot/live/broker.py](kalshibot/live/broker.py), [kalshibot/kalshi/trading.py](kalshibot/kalshi/trading.py)).
+Everything after a fill (positions, P&L, analytics, risk limits, the kill switch, the dashboard)
+works exactly as in paper mode, but from Kalshi's real fills and fees.
+
+**Setup**
+
+1. Create an API key on Kalshi (Account → API keys). Start on the **demo** exchange
+   (`demo.kalshi.co`, fake money) with its own key.
+2. Turn live mode on in `config.yaml` and restart:
+   ```yaml
+   live:
+     enabled: true
+     environment: demo          # prod = real money
+     max_order_contracts: 100   # hard per-order caps, checked after the risk limits
+     max_order_cost: 100
+   ```
+3. Add the key in the dashboard: **Settings → Kalshi API keys**. Choose the exchange, enter the
+   key ID and upload the `.pem` file (or paste it). The server checks the key against Kalshi
+   and only saves it if Kalshi accepts it. Live trading unlocks at once, with no restart.
+   Until a key works, the top bar says live trading is **locked**: orders are refused and the
+   engine cannot start.
+4. The top bar shows **LIVE · DEMO** or **LIVE · REAL MONEY**. The engine stays stopped until
+   you press Start (`live.autostart: false`). Review which strategies are enabled and the risk
+   limits first.
+
+**Where keys are kept, and how they stay safe**
+
+- **Write-only.** A saved key is never sent back to a browser, never logged and never shown
+  again. The dashboard shows only a masked key ID and the public-key fingerprint.
+- **Owner-only file.** Keys are written to `live.secrets_path`
+  (`data/secrets/kalshi-keys.json`) with mode 0600 in a 0700 directory. `data/` is git-ignored
+  and kept out of the Docker image; it is the container's bind mount, so keys survive
+  rebuilds. The file is not encrypted: anyone who can read it as the bot's OS user can use
+  the key.
+- **Requests from other websites are refused.** The key endpoints accept requests only when
+  they are addressed to localhost (or a name in `server.allowed_hosts`), have no foreign
+  `Origin`, and carry the dashboard's `X-Kalshibot-Request` header. That blocks other
+  websites open in your browser, including DNS-rebinding tricks.
+- **No login.** The dashboard has none. Anyone who can open it can start the engine and
+  trade with the stored key, so keep it bound to `127.0.0.1` (the default).
+- **Removing a key** deletes it from the file (refused while the engine runs on it). Revoke
+  it on Kalshi too if it may have leaked.
+
+**Alternatives to the dashboard.** You can set `live.api_key_id` plus `live.private_key_path`
+(e.g. `keys/kalshi-demo.pem`; `*.pem` and `keys/` are git-ignored), or the env vars
+`KALSHIBOT_LIVE__API_KEY_ID` and `KALSHIBOT_LIVE__PRIVATE_KEY_PEM`. A key set this way wins
+over the dashboard's. `uv run kalshibot live-check` signs a few read-only requests with
+whichever key applies and prints your balance, positions and resting orders.
+
+**How it behaves**
+
+- **Separate ledger.** The live ledger is `live.storage_path` (`data/kalshibot-live.sqlite3`);
+  paper history stays where it was. A new ledger starts at your Kalshi balance.
+- **Orders.** Taker intents go out as `fill_or_kill` by default (all or nothing; set
+  `taker_time_in_force: immediate_or_cancel` for partial fills). Resting intents are
+  `good_till_canceled` with an expiration time. Every order is written to the database
+  before it is sent, with a unique `client_order_id`. A timed-out submission is never resent:
+  the next order pass finds it on Kalshi by that id.
+- **Fills** come from `GET /portfolio/fills` at Kalshi's prices and fees. Kalshi matches in
+  hundredths of a contract and the ledger counts whole contracts. An `immediate_or_cancel`
+  order that ends on a fraction leaves that fraction outside the ledger. It is logged, and
+  `live.residue` tracks it.
+- **Not supported live:** multi-leg baskets (`no_basket_arb`). Kalshi has no atomic multi-market
+  order, so they are rejected rather than legged.
+- **Reconciliation.** Every equity snapshot (60 s) compares the ledger with the Kalshi balance
+  and positions. A difference shows as a banner and in Settings → Live trading. The bot never
+  "fixes" its ledger by itself. After a deposit or withdrawal, press **Sync cash to Kalshi**
+  (`POST /api/live/sync-cash`), which books the gap as a transfer so P&L is unchanged.
+  Positions you open by hand in the same account show up as mismatches.
+- **Reset** (`POST /api/account/reset`) starts a new live ledger at the current Kalshi balance.
+  It is refused while the ledger holds positions or open orders. The CLI `reset` refuses in
+  live mode.
+- **Kill switch** cancels every resting order on Kalshi.
 
 ## Configuration
 
@@ -422,10 +387,6 @@ At runtime:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the binding contract (modules, broker
   rules, REST/SSE API, config).
-- [docs/COINBASE_CONTRACT.md](docs/COINBASE_CONTRACT.md): the Coinbase venue. It has a
-  parallel stack under `kalshibot/coinbase/` (client, market data, spot paper broker, risk,
-  bar-based strategies, engine, and `/api/coinbase/*` with SSE at `/api/coinbase/stream`),
-  plus `GET /api/overview` across both venues.
 - [docs/kalshi_api_notes.md](docs/kalshi_api_notes.md): verified Kalshi API facts
   (formats, fees and fee rounding, lifecycle, rate limits).
 - [research/](research/): empirical strategy research (arbitrage, calibration, crypto

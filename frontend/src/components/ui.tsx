@@ -3,9 +3,7 @@ import { errorMessage } from "../api/client";
 import type { PollResult } from "../lib/hooks";
 import { useNow } from "../lib/hooks";
 import { fmtAbsolute, fmtRelative } from "../lib/format";
-import { useResolvedVenue } from "../lib/venueScope";
 import { Icon, type IconName } from "./Icon";
-import { VenueBadge, type Venue } from "./Venue";
 
 export function Card({
   title,
@@ -71,7 +69,6 @@ export function KpiTile({
   tone,
   hero,
   title,
-  venue: venueProp,
 }: {
   label: string;
   value: ReactNode;
@@ -79,20 +76,10 @@ export function KpiTile({
   tone?: "pos" | "neg" | "zero";
   hero?: boolean;
   title?: string;
-  /** Paper account the figure belongs to (VenueBadge). Omitted = enclosing VenueScope; null = none. */
-  venue?: Venue | null;
 }) {
-  const venue = useResolvedVenue(venueProp);
   return (
-    <div className={`kpi${hero ? " kpi-hero" : ""}${venue ? ` kpi-venue venue-${venue}` : ""}`} title={title}>
-      {venue ? (
-        <div className="kpi-head">
-          <div className="kpi-label">{label}</div>
-          <VenueBadge venue={venue} compact="phone" />
-        </div>
-      ) : (
-        <div className="kpi-label">{label}</div>
-      )}
+    <div className={`kpi${hero ? " kpi-hero" : ""}`} title={title}>
+      <div className="kpi-label">{label}</div>
       <div className={`kpi-value${tone ? ` tone-${tone}` : ""}`}>{value}</div>
       {sub && <div className="kpi-sub">{sub}</div>}
     </div>

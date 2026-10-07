@@ -1,16 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, errorMessage, isUnreachable } from "../api/client";
-import type { EngineStatus, OverviewVenue, StatusResponse } from "../api/types";
+import type { EngineStatus, StatusResponse } from "../api/types";
 import { useAction, useNow, useServerNow } from "../lib/hooks";
 import { fmtRelative, parseTs } from "../lib/format";
-import { useOverview } from "../lib/overview";
 import { useStatus, type EngineBusy } from "../lib/status";
 import { streamStore, useStreamInfo } from "../lib/stream";
 import { useToast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { Icon } from "./Icon";
-import { VenueBadge, VENUES, type Venue } from "./Venue";
 
 export type EngineState = "unreachable" | "backend-error" | "loading" | "killed" | "error" | "stalled" | "running" | "stopped";
 
@@ -91,11 +88,10 @@ export function lastErrorLine(e: EngineStatus, serverNow: number): string {
 }
 
 /**
- * Kalshi engine pill for the top bar: VenueBadge + state + SSE indicator, linking to
- * the Kalshi section. State comes from /api/status (StatusProvider), which is richer
- * than /api/overview (stalled ticks, current vs historical errors, exchange pauses).
+ * Engine pill for the top bar: state + SSE indicator. State comes from /api/status
+ * (StatusProvider): stalled ticks, current vs historical errors, exchange pauses.
  */
-export function KalshiVenueStatus() {
+export function EngineStatusPill() {
   const { status, error, updatedAt } = useStatus();
   const now = useNow();
   const serverNow = useServerNow();
@@ -142,7 +138,7 @@ export function KalshiVenueStatus() {
 
   return (
     <>
-      <VenueStatusLink venue="kalshi">
+      <span className="engine-status">
         <span className={`pill pill-${p.cls}`} title={detail}>
           <Icon name={p.icon} className={st === "running" ? "pulse" : undefined} />
           <span className="pill-label">{p.label}</span>
@@ -153,116 +149,11 @@ export function KalshiVenueStatus() {
           )}
         </span>
         <StreamIndicator />
-      </VenueStatusLink>
+      </span>
       <span className="sr-only" role="status" aria-live="polite">
         {announcement}
       </span>
     </>
-  );
-}
-
-/** @deprecated kept for old imports: the Kalshi pill (now with its venue badge). */
-export const EngineStatusPill = KalshiVenueStatus;
-
-/** Engine state of one venue as reported by GET /api/overview. */
-export type OverviewEngineState = "loading" | "unknown" | "unavailable" | "killed" | "error" | "running" | "stopped";
-
-export const OVERVIEW_STATE: Record<OverviewEngineState, { cls: string; tone: "neutral" | "serious" | "bad" | "good"; label: string; icon: "dot" | "stop" | "shield" | "alert" | "plug" | "clock" }> = {
-  loading: { cls: "neutral", tone: "neutral", label: "Connecting…", icon: "clock" },
-  unknown: { cls: "serious", tone: "serious", label: "Status unknown", icon: "plug" },
-  unavailable: { cls: "serious", tone: "serious", label: "Unavailable", icon: "alert" },
-  killed: { cls: "bad", tone: "bad", label: "Kill switch ON", icon: "shield" },
-  error: { cls: "serious", tone: "serious", label: "Running · error", icon: "alert" },
-  running: { cls: "good", tone: "good", label: "Running", icon: "dot" },
-  stopped: { cls: "neutral", tone: "neutral", label: "Stopped", icon: "stop" },
-};
-
-/**
- * State of a venue from its /api/overview block. `last_error` counts as current while
- * younger than 10 minutes, or when the backend sends no `last_error_at` (safe side).
- */
-export function overviewEngineState(v: OverviewVenue | undefined, error: unknown, serverNow: number): OverviewEngineState {
-  if (!v) return error ? "unknown" : "loading";
-  if (!v.available) return "unavailable";
-  if (v.kill_switch) return "killed";
-  if (!v.engine_running) return "stopped";
-  if (v.last_error) {
-    const at = parseTs(v.last_error_at);
-    if (at === null || serverNow - at < ERROR_CURRENT_MS) return "error";
-  }
-  return "running";
-}
-
-/**
- * Coinbase engine pill for the top bar, from GET /api/overview (OverviewProvider).
- * A Coinbase outage or a server without the venue reads "Unavailable" here and never
- * touches the Kalshi pill.
- */
-export function CoinbaseVenueStatus() {
-  const { data, error, updatedAt } = useOverview();
-  const now = useNow();
-  const serverNow = useServerNow();
-  const v = data?.venues.coinbase;
-  const st = overviewEngineState(v, error, serverNow);
-  const p = OVERVIEW_STATE[st];
-  const lastSeen = updatedAt ? fmtRelative(new Date(updatedAt).toISOString(), now) : null;
-  const detail = [
-    error ? `/api/overview failed: ${errorMessage(error)}${v && lastSeen ? ` — showing the state from ${lastSeen}` : ""}` : null,
-    !v
-      ? error
-        ? null
-        : "Waiting for /api/overview"
-      : !v.available
-        ? `Coinbase venue unavailable: ${v.unavailable_reason ?? "no reason reported"}. The Kalshi account is not affected.`
-        : `Coinbase engine ${v.engine_running ? "running" : "stopped"}${v.kill_switch ? " · kill switch engaged (no new buys)" : ""}`,
-    v?.available && v.last_tick_at ? `Last bar ${fmtRelative(v.last_tick_at, serverNow)}` : null,
-    v?.last_error ? `Last error${v.last_error_at ? ` (${fmtRelative(v.last_error_at, serverNow)})` : ""}: ${v.last_error}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  // Strategies trade on hourly/daily bars, so the useful age is the last bar's.
-  const sub =
-    st === "running" && v?.last_tick_at
-      ? `bar ${fmtRelative(v.last_tick_at, serverNow)}`
-      : st === "unknown" && lastSeen
-        ? `last seen ${lastSeen}`
-        : null;
-
-  const [announcement, setAnnouncement] = useState("");
-  const prev = useRef<OverviewEngineState>(st);
-  useEffect(() => {
-    if (prev.current !== st && st !== "loading" && prev.current !== "loading") setAnnouncement(`Coinbase engine: ${p.label}`);
-    prev.current = st;
-  }, [st, p.label]);
-
-  return (
-    <>
-      <VenueStatusLink venue="coinbase">
-        <span className={`pill pill-${p.cls}`} title={detail}>
-          <Icon name={p.icon} className={st === "running" ? "pulse" : undefined} />
-          <span className="pill-label">{p.label}</span>
-          {sub && (
-            <span className="pill-sub" aria-hidden="true">
-              {sub}
-            </span>
-          )}
-        </span>
-      </VenueStatusLink>
-      <span className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </span>
-    </>
-  );
-}
-
-function VenueStatusLink({ venue, children }: { venue: Venue; children: ReactNode }) {
-  const v = VENUES[venue];
-  return (
-    <Link to={v.basePath} className={`venue-status venue-${venue}`} title={`Open the ${v.name} section`}>
-      <VenueBadge venue={venue} title={`${v.name} paper account — ${v.description}`} />
-      {children}
-    </Link>
   );
 }
 
@@ -327,7 +218,9 @@ export function EngineControls({ compact }: { compact?: boolean }) {
   // whose meaning depends on it. Engaging the kill switch is always safe, so it stays
   // available when the server is answering (an HTTP error rather than unreachable).
   const staleNote = error ? ` — disabled: ${statusErrorSummary(error)}` : "";
-  const startStopDisabled = !status || !!error || busy !== null;
+  // live mode without a working key: the server refuses to start (stopping is always allowed)
+  const liveLocked = !running && status?.live != null && !status.live.ready;
+  const startStopDisabled = !status || !!error || busy !== null || liveLocked;
   const killDisabled = !status || busy !== null || (!!error && (isUnreachable(error) || killed));
 
   const startStop = async () => {
@@ -337,11 +230,9 @@ export function EngineControls({ compact }: { compact?: boolean }) {
         body: (
           <>
             <p>The Kalshi paper trading loop stops: no new signals or orders until you start it again. Open Kalshi paper positions and resting orders are kept.</p>
-            <p>The Coinbase paper account is separate and keeps running.</p>
           </>
         ),
         confirmLabel: "Stop Kalshi engine",
-        venue: "kalshi",
       });
       if (!ok) return;
     }
@@ -366,12 +257,11 @@ export function EngineControls({ compact }: { compact?: boolean }) {
             body: (
               <>
                 <p>All Kalshi strategies stop opening new positions immediately, and every resting (GTC) Kalshi order is cancelled. Existing Kalshi paper positions stay open and still settle.</p>
-                <p>The kill switch stays on until you release it (it also trips automatically when the Kalshi daily loss limit is hit). The Coinbase account has its own kill switch and is not affected.</p>
+                <p>The kill switch stays on until you release it (it also trips automatically when the Kalshi daily loss limit is hit).</p>
               </>
             ),
             confirmLabel: "Engage Kalshi kill switch",
             danger: true,
-            venue: "kalshi",
           }
         : {
             title: "Release the Kalshi kill switch?",
@@ -382,7 +272,6 @@ export function EngineControls({ compact }: { compact?: boolean }) {
               </>
             ),
             confirmLabel: "Release",
-            venue: "kalshi",
           },
     );
     if (!ok) return;
@@ -392,11 +281,11 @@ export function EngineControls({ compact }: { compact?: boolean }) {
     if (r) {
       apply(r);
       if (on) {
-        toast.info("Kalshi kill switch engaged — new entries blocked, resting orders cancelled", { venue: "kalshi" });
+        toast.info("Kalshi kill switch engaged — new entries blocked, resting orders cancelled");
         // The backend cancelled every resting order: refetch order/position views now
         // rather than waiting for their next poll (SSE may be down).
         streamStore.invalidate(["order", "fill"]);
-      } else toast.success("Kalshi kill switch released", { venue: "kalshi" });
+      } else toast.success("Kalshi kill switch released");
     } else refresh();
   };
 
@@ -408,7 +297,11 @@ export function EngineControls({ compact }: { compact?: boolean }) {
         disabled={startStopDisabled}
         aria-busy={busy === "engine"}
         aria-label={running ? "Stop Kalshi engine" : "Start Kalshi engine"}
-        title={(running ? "Stop the Kalshi trading loop (positions are kept)" : "Start the Kalshi trading loop") + staleNote}
+        title={
+          liveLocked
+            ? `Live trading is locked: ${status?.live?.blocked_reason ?? "not ready"}`
+            : (running ? "Stop the Kalshi trading loop (positions are kept)" : "Start the Kalshi trading loop") + staleNote
+        }
       >
         <Icon name={running ? "stop" : "play"} />
         <span className="btn-label">{running ? "Stop" : "Start"}</span>

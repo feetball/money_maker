@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { api, API_BASE, IS_MOCK } from "../api/client";
-import type { ExposureRow, RiskLimits, RiskResponse } from "../api/types";
+import type { CredentialsResponse, ExposureRow, KalshiEnv, RiskLimits, RiskResponse, StoredKeyInfo } from "../api/types";
 import { useConfirm } from "../components/ConfirmDialog";
 import { DataTable } from "../components/DataTable";
 import { Icon } from "../components/Icon";
 import { Badge, Card, EmptyState, Field, fieldAria, Freshness, Meter, PageHeader, PollView, Switch } from "../components/ui";
 import { StrategyTag, Usd } from "../components/values";
 import { useAction, usePolling } from "../lib/hooks";
+import { useToast } from "../lib/toast";
 import { fmtCents, fmtInt, fmtPct, fmtPnl, fmtUsd, humanize, MINUS } from "../lib/format";
 import { useStatus } from "../lib/status";
 import { streamStore, useStreamInfo } from "../lib/stream";
@@ -336,7 +337,7 @@ function AccountReset() {
         <>
           <p>
             This <strong>stops the Kalshi engine</strong> and permanently wipes all Kalshi paper state: positions, orders, fills, settlements, signals and
-            the equity history. Kalshi analytics start again from zero. The Coinbase paper account is separate and is not touched.
+            the equity history. Kalshi analytics start again from zero.
           </p>
           <p>
             New starting balance: <strong className="num">{fmtUsd(value)}</strong>. Strategy settings and risk limits are kept.
@@ -507,8 +508,283 @@ function ProfitSweep() {
   );
 }
 
+const ENV_LABEL: Record<KalshiEnv, string> = { demo: "Demo (fake money)", prod: "Production (real money)" };
+
+function KeyRow({ env, info, onRemove, busy }: { env: KalshiEnv; info: StoredKeyInfo; onRemove: () => void; busy: boolean }) {
+  return (
+    <>
+      <dt>{ENV_LABEL[env]}</dt>
+      <dd>
+        {info.source === null && <span className="muted">No key</span>}
+        {info.source === "config" && (
+          <>
+            <span className="mono">{info.api_key_id}</span> <span className="muted">· set in config.yaml or KALSHIBOT_LIVE__* env vars (change it there)</span>
+          </>
+        )}
+        {info.source === "dashboard" && (
+          <>
+            <span className="mono">{info.api_key_id}</span>
+            {info.fingerprint && (
+              <span className="muted" title="SHA-256 of the public key: compare with the key you created on Kalshi">
+                {" "}
+                · fingerprint <span className="mono">{info.fingerprint}</span>
+              </span>
+            )}
+            {info.saved_at && <span className="muted"> · saved {info.saved_at.slice(0, 16).replace("T", " ")} UTC</span>}{" "}
+            <button className="btn btn-sm" onClick={onRemove} disabled={busy}>
+              Remove
+            </button>
+          </>
+        )}
+      </dd>
+    </>
+  );
+}
+
+function ApiKeyForm({ creds, onSaved }: { creds: CredentialsResponse; onSaved: (c: CredentialsResponse) => void }) {
+  const { refresh } = useStatus();
+  const confirm = useConfirm();
+  const { busy, run } = useAction();
+  const [env, setEnv] = useState<KalshiEnv>(creds.environment);
+  const [keyId, setKeyId] = useState("");
+  const [pem, setPem] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const locked = creds.keys[env].source === "config";
+  const pemLooksOk = pem.includes("PRIVATE KEY-----");
+  const canSave = !locked && keyId.trim() !== "" && pemLooksOk && busy === null;
+
+  const clear = () => {
+    setKeyId("");
+    setPem("");
+    setFileName(null);
+  };
+
+  const loadFile = async (f: File | undefined) => {
+    if (!f) return;
+    if (f.size > 16_000) {
+      setFileName(`${f.name}: too large to be a key file`);
+      setPem("");
+      return;
+    }
+    setPem(await f.text());
+    setFileName(f.name);
+  };
+
+  const save = async () => {
+    if (!canSave) return;
+    if (env === "prod") {
+      const ok = await confirm({
+        title: "Save a production (real-money) key?",
+        danger: true,
+        confirmLabel: "Save production key",
+        body: (
+          <p>
+            With live trading on in production, this key lets the bot place <strong>real orders with your money</strong>. Anyone who can open this
+            dashboard can start the engine, so keep it on localhost.
+          </p>
+        ),
+      });
+      if (!ok) return;
+    }
+    const r = await run("save", () => api.putCredentials(env, keyId.trim(), pem), { error: "The key was not saved" });
+    clear(); // the key leaves browser memory either way
+    if (r) {
+      onSaved(r);
+      refresh();
+    }
+  };
+
+  return (
+    <div className="api-key-form">
+      <div className="form-row">
+        <Field label="Exchange" htmlFor="key-env">
+          <select id="key-env" className="input" value={env} onChange={(e) => setEnv(e.target.value as KalshiEnv)}>
+            <option value="demo">{ENV_LABEL.demo}</option>
+            <option value="prod">{ENV_LABEL.prod}</option>
+          </select>
+        </Field>
+        <Field label="API key ID" htmlFor="key-id" hint="Shown next to the key on Kalshi (Account → API keys).">
+          <input
+            id="key-id"
+            className="input mono"
+            autoComplete="off"
+            spellCheck={false}
+            value={keyId}
+            disabled={locked}
+            onChange={(e) => setKeyId(e.target.value)}
+          />
+        </Field>
+      </div>
+      <Field label="Private key" htmlFor="key-file" hint="The .pem file Kalshi downloaded when you created the key, or paste its text below.">
+        <input id="key-file" className="input" type="file" accept=".pem,.key,.txt" disabled={locked} onChange={(e) => void loadFile(e.target.files?.[0])} />
+      </Field>
+      <textarea
+        className="input mono secret-input"
+        aria-label="Private key (PEM text)"
+        rows={3}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="…or paste -----BEGIN PRIVATE KEY----- …"
+        value={fileName ? "" : pem}
+        disabled={locked || fileName !== null}
+        onChange={(e) => setPem(e.target.value)}
+      />
+      {fileName && (
+        <p className="muted">
+          Loaded <span className="mono">{fileName}</span>
+          {pemLooksOk ? "" : " — this does not look like a PEM private key"}{" "}
+          <button className="btn btn-sm" onClick={clear}>
+            Clear
+          </button>
+        </p>
+      )}
+      {locked && <p className="muted">The {env} key comes from config.yaml / env vars, which win over the dashboard.</p>}
+      <button className="btn btn-primary" onClick={save} disabled={!canSave} aria-busy={busy === "save"}>
+        <Icon name="check" /> Verify with Kalshi &amp; save
+      </button>
+    </div>
+  );
+}
+
+function ApiKeys() {
+  const poll = usePolling((signal) => api.credentials({ signal }), { intervalMs: 30_000, label: "API keys" });
+  const { refresh } = useStatus();
+  const confirm = useConfirm();
+  const { busy, run } = useAction();
+  const toast = useToast();
+  const remove = async (env: KalshiEnv) => {
+    const ok = await confirm({
+      title: `Remove the ${env} key from this bot?`,
+      danger: true,
+      confirmLabel: "Remove key",
+      body: <p>The key file entry is deleted. If live trading uses this key it locks until you add another. The key stays valid on Kalshi: revoke it there if it may have leaked.</p>,
+    });
+    if (!ok) return;
+    const r = await run("remove", () => api.deleteCredentials(env), { success: `${env} key removed`, error: "Couldn't remove the key" });
+    if (r) {
+      poll.mutate(() => r);
+      refresh();
+    }
+  };
+  return (
+    <PollView<CredentialsResponse> poll={poll} loadingLabel="Loading keys…">
+      {(c) => (
+        <div className="reset">
+          <dl className="kv">
+            <KeyRow env="demo" info={c.keys.demo} busy={busy !== null} onRemove={() => void remove("demo")} />
+            <KeyRow env="prod" info={c.keys.prod} busy={busy !== null} onRemove={() => void remove("prod")} />
+            <dt>Live trading</dt>
+            <dd>
+              {c.live_enabled ? (
+                c.ready ? (
+                  <Badge tone="bad" icon="alert">
+                    On · {c.environment} · ready
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge tone="warn" icon="alert">
+                      On · {c.environment} · locked
+                    </Badge>{" "}
+                    <span className="muted">{c.blocked_reason}</span>
+                  </>
+                )
+              ) : (
+                <span className="muted">
+                  Off. Keys can be added and verified now; set <span className="mono">live.enabled: true</span> in config.yaml and restart to trade.
+                </span>
+              )}
+            </dd>
+          </dl>
+          <ApiKeyForm
+            creds={c}
+            onSaved={(r) => {
+              poll.mutate(() => r);
+              toast.success(
+                r.verified_balance !== null ? `Key verified with Kalshi (balance ${fmtUsd(r.verified_balance)}) and saved` : "Key saved",
+                r.activated ? { message: "Live trading is unlocked. Start the engine when you're ready." } : undefined,
+              );
+            }}
+          />
+          <p className="muted small">
+            How keys are kept: they are sent once over this connection, checked against Kalshi, then written to{" "}
+            <span className="mono">{c.secrets_path ?? "the key file"}</span>, which only the bot's user can read. They are never shown again, logged, or sent
+            back to any browser, and that file stays out of git and the Docker image. The dashboard has no login, so anyone who can open it can trade with
+            these keys: keep it bound to localhost.
+          </p>
+        </div>
+      )}
+    </PollView>
+  );
+}
+
+function LiveTrading() {
+  const { status, refresh } = useStatus();
+  const { busy, run } = useAction();
+  const confirm = useConfirm();
+  const live = status?.live;
+  if (!live) return null;
+  const x = live.exchange;
+  const reconcile = async () => {
+    if (await run("reconcile", () => api.liveReconcile(), { success: "Compared the ledger with Kalshi", error: "Couldn't reach Kalshi" })) refresh();
+  };
+  const sync = async () => {
+    const ok = await confirm({
+      title: "Book the balance difference as a transfer?",
+      confirmLabel: "Sync cash",
+      body: (
+        <p>
+          The ledger's cash is set to the Kalshi balance ({fmtUsd(x.balance ?? undefined)}). The difference ({fmtPnl(x.cash_drift ?? 0)}) is treated as a deposit
+          or withdrawal, so the starting balance moves with it and P&amp;L is unchanged. Use this after you move money in or out of Kalshi.
+        </p>
+      ),
+    });
+    if (!ok) return;
+    const r = await run("sync", () => api.liveSyncCash(), { error: "Couldn't sync cash" });
+    if (r) refresh();
+  };
+  return (
+    <div className="reset">
+      <dl className="kv">
+        <dt>Environment</dt>
+        <dd>
+          <Badge tone={live.environment === "prod" ? "bad" : "warn"} icon="alert">
+            {live.environment === "prod" ? "Production: real money" : "Demo exchange: fake money"}
+          </Badge>
+        </dd>
+        <dt>Per-order caps</dt>
+        <dd className="num">
+          {fmtInt(live.max_order_contracts)} contracts · {fmtUsd(live.max_order_cost)} · taker orders sent as {humanize(live.taker_time_in_force)}
+        </dd>
+        <dt>Kalshi balance</dt>
+        <dd className="num">{fmtUsd(x.balance ?? undefined)}</dd>
+        <dt>Ledger cash</dt>
+        <dd className="num">{fmtUsd(x.ledger_cash ?? undefined)}</dd>
+        <dt>Difference</dt>
+        <dd className="num">{x.cash_drift === null ? "—" : fmtPnl(x.cash_drift)}</dd>
+        <dt>Positions</dt>
+        <dd>
+          {x.position_mismatches.length === 0
+            ? "Match Kalshi"
+            : x.position_mismatches.map((m) => `${m.ticker}: ledger ${m.ledger}, Kalshi ${m.exchange}`).join("; ")}
+        </dd>
+        <dt>Last checked</dt>
+        <dd>{x.checked_at ?? "never"}{x.error ? ` · error: ${x.error}` : ""}</dd>
+      </dl>
+      <div className="form-row">
+        <button className="btn" onClick={reconcile} disabled={busy !== null} aria-busy={busy === "reconcile"}>
+          <Icon name="check" /> Compare now
+        </button>
+        <button className="btn" onClick={sync} disabled={busy !== null || x.balance === null} aria-busy={busy === "sync"}>
+          <Icon name="alert" /> Sync cash to Kalshi…
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Preferences() {
   const stream = useStreamInfo();
+  const { status } = useStatus();
   return (
     <dl className="kv">
       <dt>Theme</dt>
@@ -524,10 +800,21 @@ function Preferences() {
       </dd>
       <dt>Mode</dt>
       <dd>
-        <Badge tone="warn" icon="shield">
-          Paper trading only
-        </Badge>{" "}
-        <span className="muted">No real orders, no Kalshi credentials.</span>
+        {status?.mode === "live" ? (
+          <>
+            <Badge tone="bad" icon="alert">
+              Live trading
+            </Badge>{" "}
+            <span className="muted">Orders go to Kalshi ({status.live?.environment === "prod" ? "real money" : "demo exchange"}).</span>
+          </>
+        ) : (
+          <>
+            <Badge tone="warn" icon="shield">
+              Paper trading
+            </Badge>{" "}
+            <span className="muted">No real orders. Set live.enabled in config.yaml to trade for real.</span>
+          </>
+        )}
       </dd>
     </dl>
   );
@@ -544,9 +831,17 @@ export function Settings() {
     if (seenKill.current !== undefined && kill !== undefined && kill !== seenKill.current) refresh();
     seenKill.current = kill;
   }, [kill, refresh]);
+  // when live trading waits for a key, that is the first thing to do here
+  const liveLocked = status?.live != null && !status.live.ready;
+  const keysCard = (
+    <Card title="Kalshi API keys" subtitle="Needed for live trading. Write-only: a saved key is never shown again">
+      <ApiKeys />
+    </Card>
+  );
   return (
     <div className="page">
-      <PageHeader title="Settings" subtitle="Kalshi risk limits are enforced on every Kalshi order intent before it reaches the Kalshi paper broker." actions={<Freshness poll={poll} />} />
+      <PageHeader title="Settings" subtitle={`Risk limits are enforced on every order intent before it reaches the ${status?.mode === "live" ? "live Kalshi" : "paper"} broker.`} actions={<Freshness poll={poll} />} />
+      {liveLocked && keysCard}
       <Card title="Risk limits" subtitle="Changes apply to the next intent the engine evaluates">
         <PollView<RiskResponse> poll={poll} loadingLabel="Loading risk limits…">
           {(r) => <RiskLimitsForm risk={r} onSaved={(n) => poll.mutate(() => n)} />}
@@ -555,6 +850,12 @@ export function Settings() {
       <Card title="Current utilization">
         <PollView<RiskResponse> poll={poll}>{(r) => <Utilization risk={r} />}</PollView>
       </Card>
+      {!liveLocked && keysCard}
+      {status?.mode === "live" && (
+        <Card title="Live trading" subtitle="The bot's ledger compared with your Kalshi account (checked every snapshot)">
+          <LiveTrading />
+        </Card>
+      )}
       <Card title="Profit sweep" subtitle="Keep winning trades' profit out of the tradeable pool, or bring some back in">
         <ProfitSweep />
       </Card>

@@ -1,9 +1,11 @@
-"""Command line: ``kalshibot serve|reset|backtest|coinbase-reset|coinbase-backtest`` (PAPER TRADING ONLY).
+"""Command line: ``kalshibot serve|reset|backtest|live-check``.
+
+Paper trading unless ``live.enabled`` is true in the config (then ``serve`` sends real orders
+to Kalshi; see :mod:`kalshibot.live.broker`).
 
 * ``kalshibot serve`` runs the API + dashboard + engine in one process
   (http://127.0.0.1:8765 by default). The Kalshi engine starts when ``engine.autostart`` is
-  true, the Coinbase engine when ``coinbase.engine.autostart`` is (``--no-engine`` starts
-  neither). Ctrl-C shuts down cleanly (engine stopped, SSE streams
+  true (``--no-engine`` leaves it stopped). Ctrl-C shuts down cleanly (engine stopped, SSE streams
   closed within a few seconds, database closed).
 * ``kalshibot reset`` wipes the paper account (orders, fills, positions, settlements,
   equity, signals) and starts over with ``--starting-balance`` (default from config). It
@@ -16,13 +18,8 @@
   ``--no-risk``, ``--opt k=v``. ``--save`` stores the result in the database (``storage.path`` or
   ``--storage``) so the dashboard's Backtests page lists it; ``--trades FILE.csv`` writes the
   trade list. The hourly research data needs pyarrow: ``uv run --with pyarrow kalshibot backtest ...``.
-
-* ``kalshibot coinbase-reset [--starting-balance USD] [--clear-kill-switch] [-y]`` wipes the
-  separate Coinbase paper account (``coinbase.storage_path``); refuses while a server owns it
-  (use ``POST /api/coinbase/account/reset`` instead).
-* ``kalshibot coinbase-backtest --strategy NAME [--start] [--end] [--param k=v ...] [--fee-tier]
-  [--slippage spread|BPS] [--save]`` replays ``research/coinbase/data`` through a Coinbase spot
-  strategy (``kalshibot.coinbase.backtest.run_spot_backtest``; PAPER only).
+* ``kalshibot live-check`` (read-only) checks the live credentials and prints the Kalshi balance,
+  open positions and resting orders. It places no orders.
 
 Config: ``--config PATH``, else ``$KALSHIBOT_CONFIG``, else ``./config.yaml`` (created from
 ``config.example.yaml`` on the first ``serve``), plus ``KALSHIBOT_<SECTION>__<KEY>`` env
@@ -54,18 +51,20 @@ log = logging.getLogger("kalshibot")
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="kalshibot",
-                                description="Kalshi paper-trading bot and dashboard (PAPER TRADING ONLY).")
+                                description="Kalshi trading bot and dashboard (paper unless live.enabled).")
     p.add_argument("-c", "--config", help="config file (default: $KALSHIBOT_CONFIG or ./config.yaml)")
     p.add_argument("--log-level", default=os.environ.get("KALSHIBOT_LOG_LEVEL", "INFO"),
                    help="logging level (default INFO)")
     sub = p.add_subparsers(dest="command", required=True,
-                           metavar="{serve,reset,backtest,coinbase-reset,coinbase-backtest}")
+                           metavar="{serve,reset,backtest,live-check}")
 
     s = sub.add_parser("serve", help="run the API, dashboard and trading engine")
     s.add_argument("--host", help="bind address (default: server.host)")
     s.add_argument("--port", type=int, help="port (default: server.port)")
     s.add_argument("--storage", help="SQLite path (default: storage.path)")
-    s.add_argument("--no-engine", action="store_true", help="start neither venue's engine (Kalshi nor Coinbase) automatically")
+    s.add_argument("--no-engine", action="store_true", help="do not start the trading engine automatically")
+
+    sub.add_parser("live-check", help="check the live API key and show the Kalshi balance (read-only)")
 
     r = sub.add_parser("reset", help="wipe the paper account and start over")
     r.add_argument("--starting-balance", type=float, help="new starting balance (default: account.starting_balance)")
@@ -95,34 +94,6 @@ def build_parser() -> argparse.ArgumentParser:
                    help="store the result in the database so the dashboard's Backtests page lists it")
     b.add_argument("--storage", help="SQLite path for --save (default: storage.path)")
     b.add_argument("--json", action="store_true", help="print the whole result (trades, equity curve) as JSON")
-
-    # -- Coinbase spot PAPER venue (docs/COINBASE_CONTRACT.md) -----------------------------
-    cr = sub.add_parser("coinbase-reset", help="wipe the Coinbase paper account and start over")
-    cr.add_argument("--starting-balance", type=float,
-                    help="new starting balance in USD (default: coinbase.starting_balance)")
-    cr.add_argument("--storage", dest="cb_storage", help="Coinbase SQLite path (default: coinbase.storage_path)")
-    cr.add_argument("--clear-kill-switch", action="store_true", help="also turn the Coinbase kill switch off")
-    cr.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
-
-    cb = sub.add_parser("coinbase-backtest", help="replay research/coinbase/data through a Coinbase strategy")
-    cb.add_argument("--strategy", required=True, help="Coinbase strategy name (see GET /api/coinbase/strategies)")
-    cb.add_argument("--start", help="first day YYYY-MM-DD, UTC (default: after the strategy's warm-up)")
-    cb.add_argument("--end", help="last day YYYY-MM-DD, UTC, inclusive (default: the last complete bar)")
-    cb.add_argument("--param", action="append", default=[], metavar="K=V",
-                    help="strategy parameter (repeatable); JSON values (0.97, true, [..]) else text")
-    cb.add_argument("--params", default="{}", help="JSON object of strategy parameters (--param wins)")
-    cb.add_argument("--starting-balance", type=float, help="starting balance in USD (default 1000)")
-    cb.add_argument("--fee-tier", help="fee tier key, e.g. intro, intro_pre_2026_09 (default: coinbase.fee_tier)")
-    cb.add_argument("--slippage", help="'spread' (half the product's spread, default) or a number of bps")
-    cb.add_argument("--data-dir", help="research data directory (default: research/coinbase/data)")
-    cb.add_argument("--opt", action="append", default=[], metavar="K=V",
-                    help="other backtester option, e.g. min_trade_usd=10, allocation_pct=100, benchmarks=false")
-    cb.add_argument("--trades", metavar="CSV", help="also write the trade list to this CSV file")
-    cb.add_argument("--save", action="store_true",
-                    help="store the result in the Coinbase database so the dashboard's Coinbase Backtests page lists it")
-    cb.add_argument("--storage", dest="cb_storage",
-                    help="Coinbase SQLite path for --save (default: coinbase.storage_path)")
-    cb.add_argument("--json", action="store_true", help="print the whole result as JSON")
     return p
 
 
@@ -187,11 +158,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
     # server's Store re-acquires the lock and holds it for its whole lifetime
     if settings.storage.path != ":memory:" and not settings.storage.path.startswith("file:"):
         ProcessLock(settings.storage.path).acquire().release()
-    # --no-engine: neither venue's engine starts (each can be started from the UI)
-    app = create_app(settings, autostart=False if args.no_engine else None,
-                     coinbase_autostart=False if args.no_engine else None)
-    log.info("kalshibot (PAPER TRADING) on http://%s:%d  storage=%s", settings.server.host, settings.server.port,
+    # --no-engine: the engine does not start (it can be started from the UI)
+    app = create_app(settings, autostart=False if args.no_engine else None)
+    mode = f"LIVE TRADING on Kalshi {settings.live.environment}" if settings.live.enabled else "PAPER TRADING"
+    log.info("kalshibot (%s) on http://%s:%d  storage=%s", mode, settings.server.host, settings.server.port,
              os.path.abspath(settings.storage.path))
+    if settings.live.enabled:
+        log.warning("LIVE MODE: strategies place real orders on %s (max %d contracts / $%s per order). "
+                    "The engine %s.", settings.kalshi.base_url, settings.live.max_order_contracts,
+                    settings.live.max_order_cost,
+                    "starts now" if settings.live.autostart and not args.no_engine
+                    else "stays stopped until you start it from the dashboard")
 
     class Server(uvicorn.Server):
         def handle_exit(self, sig: int, frame: Any) -> None:
@@ -211,6 +188,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
     from kalshibot.store import Store
 
     settings = _settings(args)
+    if settings.live.enabled:
+        print("error: live.enabled is true; the live ledger is reset from the running server "
+              "(POST /api/account/reset), which re-reads the Kalshi balance", file=sys.stderr)
+        return 2
     start = args.starting_balance if args.starting_balance is not None else settings.account.starting_balance
     if not args.yes:
         ans = input(f"Wipe the paper account in {os.path.abspath(settings.storage.path)} and restart at ${start}? "
@@ -227,6 +208,40 @@ def cmd_reset(args: argparse.Namespace) -> int:
     finally:
         store.close()
     print(json.dumps(acct.to_json(), indent=2))
+    return 0
+
+
+def cmd_live_check(args: argparse.Namespace) -> int:
+    """Read-only: sign a few GETs with the live key and print what Kalshi reports."""
+    from kalshibot.api.server import build_trader
+    from kalshibot.live.secrets import CredentialStore
+
+    settings = _settings(args)
+    try:
+        trader, source = build_trader(settings, CredentialStore(settings.live.secrets_path))
+    except (OSError, ValueError, TypeError) as e:
+        print(f"error: cannot load the live credentials: {e}", file=sys.stderr)
+        return 2
+    if trader.signer is None:
+        print(f"error: no Kalshi {settings.live.environment} API key: set live.api_key_id + "
+              "live.private_key_path, or add one in the dashboard (Settings -> API keys)", file=sys.stderr)
+        return 2
+
+    async def run() -> dict[str, Any]:
+        async with trader:
+            bal = await trader.get_balance()
+            positions = await trader.get_positions()
+            resting = await trader.get_orders(status="resting", max_pages=1)
+        return {"environment": settings.live.environment, "base_url": trader.base_url, "key_source": source,
+                "enabled": settings.live.enabled, "balance": bal, "positions": positions,
+                "resting_orders": len(resting)}
+
+    try:
+        out = asyncio.run(run())
+    except Exception as e:
+        print(f"error: Kalshi refused or failed the request: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(out, indent=2, default=str))
     return 0
 
 
@@ -326,119 +341,6 @@ def _save_backtest(settings: Settings, strategy: str, params: Any, start: str | 
     return bt_id
 
 
-def cmd_coinbase_reset(args: argparse.Namespace) -> int:
-    """Wipe the Coinbase paper account (refuses while a server owns its database)."""
-    from decimal import Decimal
-
-    from kalshibot.coinbase.broker import SpotPaperBroker
-    from kalshibot.coinbase.risk import SpotRiskManager
-    from kalshibot.coinbase.store import SpotStore
-
-    settings = _settings(args)
-    cb = settings.coinbase
-    if getattr(cb, "load_error", None):
-        raise ConfigError(str(cb.load_error))
-    path = args.cb_storage or cb.storage_path
-    start = args.starting_balance if args.starting_balance is not None else float(cb.starting_balance)
-    if start <= 0:
-        print("error: --starting-balance must be positive", file=sys.stderr)
-        return 2
-    if not args.yes:
-        ans = input(f"Wipe the Coinbase paper account in {os.path.abspath(path)} and restart at ${start}? [y/N] ")
-        if ans.strip().lower() not in ("y", "yes"):
-            print("aborted")
-            return 1
-    store = SpotStore(path, exclusive=True)  # refuses while `serve` owns the database
-    try:
-        broker = SpotPaperBroker(None, store, settings=cb)  # no market data needed for a reset
-        acct = broker.reset(Decimal(str(start)))
-        if args.clear_kill_switch:
-            SpotRiskManager(cb, store=store).set_kill_switch(False, "reset via CLI")
-    finally:
-        store.close()
-    print(json.dumps(acct.to_json(), indent=2))
-    return 0
-
-
-def cmd_coinbase_backtest(args: argparse.Namespace) -> int:
-    """Replay the research candles through a Coinbase strategy and print the metrics."""
-    from kalshibot.coinbase.strategies import REGISTRY, ParamError
-
-    settings = _settings(args)
-    cls = REGISTRY.get(args.strategy)
-    if cls is None:
-        print(f"unknown coinbase strategy {args.strategy!r}; known: {', '.join(sorted(REGISTRY)) or '(none)'}",
-              file=sys.stderr)
-        return 2
-    try:
-        raw: Any = json.loads(args.params)
-        if not isinstance(raw, dict):
-            raise ValueError("--params must be a JSON object")
-        raw.update(_kv_pairs(args.param, "--param"))
-        params = cls.resolve_params(raw, strict=True)
-        opts = _kv_pairs(args.opt, "--opt")
-    except (ValueError, ParamError) as e:
-        print(f"invalid --params/--param/--opt: {e}", file=sys.stderr)
-        return 2
-    slippage: Any = "spread"
-    if args.slippage and args.slippage != "spread":
-        try:
-            slippage = float(args.slippage)
-        except ValueError:
-            print("--slippage must be 'spread' or a number of bps", file=sys.stderr)
-            return 2
-    from kalshibot.coinbase.backtest import run_spot_backtest
-
-    start_bal = args.starting_balance if args.starting_balance is not None else 1000.0
-    try:
-        res = run_spot_backtest(cls, params, start=args.start, end=args.end, starting_balance=start_bal,
-                                fee_tier=args.fee_tier, slippage=slippage, data_dir=args.data_dir,
-                                settings=settings, **opts)
-    except (ValueError, RuntimeError, KeyError) as e:  # bad request, missing data (SpotBacktestError)
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-    if args.trades:
-        _write_trades_csv(args.trades, res.get("trades") or [])
-    saved = None
-    if args.save:
-        saved = _save_coinbase_backtest(settings, args, args.strategy, params, start_bal, res)
-    if args.json:
-        print(json.dumps({**res, "id": saved}, indent=2, default=str))
-    else:
-        metrics = {k: v for k, v in (res.get("metrics") or {}).items() if k != "details"}
-        summary: dict[str, Any] = {"venue": "coinbase", "strategy": args.strategy, "start": res.get("start"),
-                                   "end": res.get("end"), "metrics": metrics, "by_year": res.get("by_year"),
-                                   "trades": len(res.get("trades") or [])}
-        if saved is not None:
-            summary["id"] = saved
-        print(json.dumps(summary, indent=2, default=str))
-    return 0
-
-
-def _save_coinbase_backtest(settings: Settings, args: argparse.Namespace, strategy: str, params: Any,
-                            starting_balance: float, res: dict[str, Any]) -> int:
-    """Store a finished run in the Coinbase backtests table (non-exclusive writer: the running
-    server's lock guards its paper ledger, which this does not touch)."""
-    from datetime import UTC, datetime
-    from decimal import Decimal
-
-    from kalshibot.coinbase.api import _store_result
-    from kalshibot.coinbase.store import SpotStore
-    from kalshibot.engine import jsonable
-
-    tier = ((res.get("metrics") or {}).get("details") or {}).get("fee_tier")
-    tier_name = tier.get("name") if isinstance(tier, dict) else (args.fee_tier or None)
-    store = SpotStore(args.cb_storage or settings.coinbase.storage_path)
-    try:
-        bt_id = store.create_backtest(strategy, jsonable(params), start=args.start, end=args.end,
-                                      starting_balance=Decimal(str(starting_balance)), fee_tier=tier_name,
-                                      status="done")
-        store.update_backtest(bt_id, finished_at=datetime.now(UTC), **_store_result(res))
-    finally:
-        store.close()
-    return bt_id
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_logging(args.log_level)
@@ -449,10 +351,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_reset(args)
         if args.command == "backtest":
             return cmd_backtest(args)
-        if args.command == "coinbase-reset":
-            return cmd_coinbase_reset(args)
-        if args.command == "coinbase-backtest":
-            return cmd_coinbase_backtest(args)
+        if args.command == "live-check":
+            return cmd_live_check(args)
     except FileNotFoundError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

@@ -17,3 +17,8 @@ frontend/screenshots/
 tests/
 docs/
 .git/
+
+# live-trading credentials never go into the image
+*.pem
+*.key
+keys/

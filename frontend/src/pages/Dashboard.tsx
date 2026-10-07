@@ -216,7 +216,7 @@ const EngineCard = memo(function EngineCard() {
   const failing = st === "unreachable" || st === "backend-error";
   const errorCurrent = engineErrorIsCurrent(e, now);
   return (
-    <Card title="Kalshi engine" subtitle={failing && e ? "Last known state — /api/status is failing" : "Kalshi paper trading loop"}>
+    <Card title="Kalshi engine" subtitle={failing && e ? "Last known state — /api/status is failing" : status?.mode === "live" ? "Kalshi LIVE trading loop" : "Kalshi paper trading loop"}>
       <dl className={failing ? "kv stale" : "kv"}>
         <dt>State</dt>
         <dd>
@@ -369,9 +369,14 @@ const LiveActivityCard = memo(function LiveActivityCard() {
  */
 export function Dashboard() {
   const { poll, data } = useLiveAccount();
+  const { status } = useStatus();
+  const subtitle =
+    status?.mode === "live"
+      ? `Kalshi LIVE account (${status.live?.environment === "prod" ? "real money" : "demo exchange"}) — real orders and fills`
+      : "Kalshi paper account — simulated fills against live Kalshi books";
   return (
     <div className="page">
-      <PageHeader title="Dashboard" subtitle="Kalshi paper account — simulated fills against live Kalshi books" actions={<Freshness poll={poll} />} />
+      <PageHeader title="Dashboard" subtitle={subtitle} actions={<Freshness poll={poll} />} />
       <PollView poll={{ ...poll, data }} loadingLabel="Loading account…">
         {(a) => <Kpis a={a} />}
       </PollView>

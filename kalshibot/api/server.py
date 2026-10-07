@@ -1,11 +1,15 @@
 """FastAPI app: REST + SSE for the dashboard (ARCHITECTURE.md §12), serves ``frontend/dist``.
 
-PAPER TRADING ONLY. Every endpoint reads or changes the *simulated* account; nothing here
-can place a real order.
+Paper trading by default: every endpoint reads or changes the *simulated* account. With
+``live.enabled`` the broker is a :class:`~kalshibot.live.broker.LiveBroker` and orders go to
+Kalshi with real money (``GET /api/status`` says ``"mode": "live"``).
 
 * ``create_app(settings)`` builds the whole stack (store, public Kalshi client, market
-  data, paper broker, risk manager, feeds, engine) in the app lifespan and starts the
-  engine when ``engine.autostart`` is true. Tests pass ``services=`` (fakes) instead.
+  data, paper or live broker, risk manager, feeds, engine) in the app lifespan and starts the
+  engine when ``engine.autostart`` (paper) / ``live.autostart`` (live) is true. Live mode checks
+  the credentials at startup. Tests pass ``services=`` (fakes) instead.
+* Live only: ``GET /api/live`` (exchange balance, drift, position mismatches),
+  ``POST /api/live/reconcile``, ``POST /api/live/sync-cash`` (404 in paper mode).
 * ``GET /api/health``: 200 while the engine runs and decides, 503 + ``{"detail": reason}`` when it
   is stopped/dead, Kalshi is down, it stopped ticking, or a strategy fails every tick.
 * Errors are ``{"detail": str}`` with a 4xx/5xx status (validation errors are flattened
@@ -68,6 +72,7 @@ from kalshibot.api.schemas import (
     EquityPoint,
     FillOut,
     KillSwitchRequest,
+    LiveCredentialsIn,
     LogOut,
     MarketRow,
     OrderOut,
@@ -87,6 +92,15 @@ from kalshibot.kalshi.models import series_from_event_ticker
 from kalshibot.marketdata import MarketDataService, display_title, market_url
 from kalshibot.money import D, f4
 from kalshibot.paper.broker import PaperBroker
+from kalshibot.live.broker import LiveBroker
+from kalshibot.live.secrets import ENVIRONMENTS, CredentialStore, fingerprint, mask_key_id, parse_private_key
+from kalshibot.kalshi.trading import (
+    KalshiAuthError,
+    KalshiSigner,
+    KalshiTradingClient,
+    base_url_for,
+    load_private_key,
+)
 from kalshibot.paper.models import iso
 from kalshibot.risk import RiskManager
 from kalshibot.store import Store
@@ -122,6 +136,10 @@ class AppServices:
     feeds: FeedRegistry
     bus: EventBus
     owns_resources: bool = True
+    #: authenticated client (live mode only)
+    trader: Any = None
+    #: API keys entered in the dashboard (write-only; see kalshibot/live/secrets.py)
+    credentials: CredentialStore | None = None
     backtests: dict[int, asyncio.Task[Any]] = field(default_factory=dict)
     title_miss: dict[str, float] = field(default_factory=dict)
     title_task: asyncio.Task[Any] | None = None
@@ -137,6 +155,9 @@ class AppServices:
         if self.owns_resources:
             with contextlib.suppress(Exception):
                 await self.client.aclose()
+            if self.trader is not None:
+                with contextlib.suppress(Exception):
+                    await self.trader.aclose()
             with contextlib.suppress(Exception):
                 await self.feeds.aclose()
             with contextlib.suppress(Exception):
@@ -151,21 +172,93 @@ def build_services(
     strategies: Any = None,
     feeds: FeedRegistry | None = None,
     clock: Callable[[], datetime] | None = None,
+    trader: Any = None,
 ) -> AppServices:
-    """Wire the production stack (public client, market data, paper broker, risk, engine)."""
+    """Wire the production stack (public client, market data, paper or live broker, risk, engine).
+    ``trader`` (tests) replaces the signed client built from ``settings.live``."""
     # the single-writer lock: a second `serve` or a CLI `reset` on this database fails fast
     store = store or Store(settings.storage.path, exclusive=True)
     client = client or KalshiClient(settings.kalshi.base_url, max_rps=settings.kalshi.max_rps,
                                     timeout=settings.kalshi.timeout)
     md = MarketDataService(client, settings, clock=clock)
-    broker = PaperBroker(md, store, settings=settings, clock=clock)
+    credentials = CredentialStore(settings.live.secrets_path)
+    if settings.live.enabled:
+        source = None
+        if trader is None:
+            trader, source = build_trader(settings, credentials)
+        broker: PaperBroker = LiveBroker(md, store, trader, settings=settings, clock=clock)
+        broker.credentials_source = source  # type: ignore[attr-defined]
+    else:
+        broker = PaperBroker(md, store, settings=settings, clock=clock)
     risk = RiskManager(settings, store=store, clock=clock)
     # kalshi_settled shares the engine's client, so its requests count against kalshi.max_rps
     feeds = feeds if feeds is not None else build_feeds(settings, kalshi_client=client)
     bus = EventBus()
     engine = Engine(settings, client, md, broker, risk, store, strategies, feeds=feeds, bus=bus, clock=clock)
     return AppServices(settings=settings, store=store, client=client, md=md, broker=broker, risk=risk,
-                       engine=engine, feeds=feeds, bus=bus)
+                       engine=engine, feeds=feeds, bus=bus, trader=trader, credentials=credentials)
+
+
+def config_has_key(settings: Settings) -> bool:
+    """A key is set in config.yaml / KALSHIBOT_LIVE__* (it then wins over dashboard keys)."""
+    live = settings.live
+    return bool(live.api_key_id and (live.private_key_path or live.private_key_pem))
+
+
+def resolve_signer(settings: Settings, store: CredentialStore | None) -> tuple[KalshiSigner | None, str | None]:
+    """The key for ``live.environment``: config/env first, else the dashboard's; (None, None) if
+    neither. A config key that cannot be read raises (the config is explicit, so fail loudly)."""
+    live = settings.live
+    if config_has_key(settings):
+        key = load_private_key(path=live.private_key_path or None, pem=live.private_key_pem or None)
+        return KalshiSigner(live.api_key_id, key), "config"
+    stored = store.get(live.environment) if store is not None else None
+    if stored is not None:
+        return KalshiSigner(stored.api_key_id, load_private_key(pem=stored.private_key_pem)), "dashboard"
+    return None, None
+
+
+def build_trader(settings: Settings, store: CredentialStore | None = None
+                 ) -> tuple[KalshiTradingClient, str | None]:
+    """The signed client for live trading and where its key came from. Without a key the client
+    is built anyway (``signer=None``) and live trading stays locked until one is added."""
+    live = settings.live
+    signer, source = resolve_signer(settings, store)
+    client = KalshiTradingClient(signer, base_url_for(live.environment), read_rps=live.read_rps,
+                                 write_rps=live.write_rps, subaccount=live.subaccount)
+    return client, source
+
+
+def make_probe(signer: KalshiSigner, environment: str, settings: Settings) -> KalshiTradingClient:
+    """The client that verifies a new key before it is stored (replaced in tests)."""
+    return KalshiTradingClient(signer, base_url_for(environment), max_tries=2, subaccount=settings.live.subaccount)
+
+
+#: header the dashboard sends on every request; the key endpoints require it, which a cross-site
+#: page cannot add without a CORS preflight (and this server answers no preflights)
+CSRF_HEADER = "X-Kalshibot-Request"
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def guard_sensitive(request: Request, settings: Settings) -> None:
+    """Refuse key-management requests that did not come from this app's own pages: a wrong Host
+    (DNS rebinding), a foreign Origin, or no :data:`CSRF_HEADER` (cross-site forms/fetches)."""
+    allowed = set(LOOPBACK_HOSTS) | {h.lower() for h in settings.server.allowed_hosts}
+    if settings.server.host not in ("0.0.0.0", "::", ""):
+        allowed.add(settings.server.host.lower())
+    host = (request.url.hostname or "").lower()
+    if host not in allowed:
+        raise HTTPException(403, f"API keys can only be managed via localhost or server.allowed_hosts "
+                                 f"(this request was addressed to {host or 'no host'!r})")
+    origin = request.headers.get("origin")
+    if origin and origin.rstrip("/") != f"{request.url.scheme}://{request.headers.get('host', '')}":
+        raise HTTPException(403, "cross-origin request refused")
+    if request.headers.get(CSRF_HEADER) != "1":
+        raise HTTPException(403, f"missing {CSRF_HEADER} header (use the dashboard)")
+
+
+def is_live(svc: AppServices) -> bool:
+    return isinstance(svc.broker, LiveBroker)
 
 
 def _svc(request: Request) -> AppServices:
@@ -192,7 +285,8 @@ def _now(svc: AppServices) -> datetime:
 
 def status_payload(svc: AppServices) -> dict[str, Any]:
     return {
-        "mode": "paper",
+        "mode": "live" if is_live(svc) else "paper",
+        "live": svc.broker.live_status() if is_live(svc) else None,
         "engine": svc.engine.status(),
         "exchange": {"trading_active": svc.md.trading_active, "error": svc.md.exchange_error},
         "server_time": iso(datetime.now(UTC)),
@@ -427,17 +521,8 @@ def create_app(
     services: AppServices | None = None,
     autostart: bool | None = None,
     frontend_dist: Path | None = None,
-    coinbase_services: Any = None,
-    build_coinbase: bool | None = None,
-    coinbase_autostart: bool | None = None,
 ) -> FastAPI:
-    """The ASGI app. ``services`` (tests) skips building the production stack.
-
-    Coinbase venue (docs/COINBASE_CONTRACT.md §13): ``coinbase_services`` injects a built
-    :class:`kalshibot.coinbase.services.CoinbaseServices`; otherwise it is built in the
-    lifespan when ``build_coinbase`` (default: only for the production stack, i.e. when
-    ``services`` is not injected). Its engine starts per ``coinbase.engine.autostart``
-    unless ``coinbase_autostart`` says otherwise."""
+    """The ASGI app. ``services`` (tests) skips building the production stack."""
     settings = settings or (services.settings if services is not None else load_settings())
     dist = DIST if frontend_dist is None else frontend_dist
 
@@ -449,26 +534,30 @@ def create_app(
         with contextlib.suppress(Exception):
             _fail_interrupted_backtests(svc.store)
         app.state.stopping = False
-        start = settings.engine.autostart if autostart is None else autostart
+        if is_live(svc):
+            # checks the key, resolves orders a previous run left open; without a working key the
+            # server still starts, locked, so the key can be added in Settings
+            ready = await svc.broker.start()
+            if ready:
+                log.warning("LIVE TRADING (%s): orders go to Kalshi", svc.settings.live.environment)
+            else:
+                log.error("live trading is locked: %s", svc.broker.blocked_reason)
+            start = (settings.live.autostart if autostart is None else autostart) and ready
+        else:
+            start = settings.engine.autostart if autostart is None else autostart
         if start:
             await svc.engine.start()
-        # Coinbase venue: built and started in isolation - any failure leaves cb=None
-        # (503 on /api/coinbase/*) and never touches the Kalshi venue
-        want_cb = build_coinbase if build_coinbase is not None else services is None
-        await _start_coinbase(app, settings, coinbase_services, build=want_cb, autostart=coinbase_autostart)
         try:
             yield
         finally:
             app.state.stopping = True
-            # side by side: a slow Coinbase shutdown (outage, hung job) must never eat the
-            # Kalshi venue's share of the stop budget (uvicorn 5 s + docker's 30 s grace)
-            results = await asyncio.gather(_stop_coinbase(app), svc.aclose(), return_exceptions=True)
-            for r in results:
-                if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError):
-                    log.error("shutdown step failed: %s", r, exc_info=r)
+            await svc.aclose()
 
-    app = FastAPI(title="kalshibot (paper trading)", version=__version__, lifespan=lifespan,
-                  description="Kalshi paper-trading bot API. PAPER TRADING ONLY: no real orders.")
+    live = bool(settings.live.enabled)
+    app = FastAPI(title=f"kalshibot ({'LIVE' if live else 'paper'} trading)", version=__version__,
+                  lifespan=lifespan,
+                  description=("Kalshi trading bot API. LIVE: orders are real." if live
+                               else "Kalshi trading bot API. Paper trading: no real orders."))
 
     # -- errors -----------------------------------------------------------------------
 
@@ -504,6 +593,8 @@ def create_app(
     @app.post("/api/engine/start", response_model=StatusResponse)
     async def engine_start(request: Request) -> dict[str, Any]:
         svc = _svc(request)
+        if is_live(svc) and not svc.broker.ready:
+            raise HTTPException(409, f"live trading is not ready: {svc.broker.blocked_reason}")
         await svc.engine.start()
         return status_payload(svc)
 
@@ -532,14 +623,127 @@ def create_app(
                             body: Annotated[AccountResetRequest | None, Body()] = None) -> dict[str, Any]:
         svc = _svc(request)
         await svc.engine.stop()
-        acct = await svc.broker.reset(body.starting_balance if body is not None else None)
+        try:
+            acct = await svc.broker.reset(body.starting_balance if body is not None else None)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
         svc.risk.reset()
         svc.engine.reset_strategies()
         svc.analytics_cache = None
         svc.equity_dd_cache = None
-        svc.engine.log("warning", "account", f"paper account reset to ${acct.starting_balance} (engine stopped)")
+        svc.engine.log("warning", "account", f"{'live ledger' if is_live(svc) else 'paper account'} reset to ${acct.starting_balance} "
+                       "(engine stopped)")
         svc.engine.publish_account()
         return acct.to_json()
+
+    # -- live trading -------------------------------------------------------------------
+
+    def _live_svc(request: Request) -> AppServices:
+        svc = _svc(request)
+        if not is_live(svc):
+            raise HTTPException(404, "live trading is not enabled (live.enabled: false)")
+        return svc
+
+    @app.get("/api/live")
+    async def live_status(request: Request) -> dict[str, Any]:
+        return _live_svc(request).broker.live_status()
+
+    @app.post("/api/live/reconcile")
+    async def live_reconcile(request: Request) -> dict[str, Any]:
+        svc = _live_svc(request)
+        await svc.broker.reconcile()
+        return svc.broker.live_status()
+
+    def _credentials_payload(svc: AppServices) -> dict[str, Any]:
+        st = svc.settings
+        store = svc.credentials
+        envs: dict[str, Any] = {}
+        for env in ENVIRONMENTS:
+            if config_has_key(st) and env == st.live.environment:
+                envs[env] = {"source": "config", "api_key_id": mask_key_id(st.live.api_key_id),
+                             "fingerprint": None, "saved_at": None}
+            else:
+                summ = store.summary(env) if store is not None else None
+                envs[env] = {"source": "dashboard", **summ} if summ else {"source": None}
+        out: dict[str, Any] = {"live_enabled": is_live(svc), "environment": st.live.environment,
+                               "keys": envs, "secrets_path": str(store.path) if store else None}
+        if is_live(svc):
+            out.update(ready=svc.broker.ready, blocked_reason=svc.broker.blocked_reason)
+        return out
+
+    @app.get("/api/live/credentials")
+    async def get_credentials(request: Request) -> dict[str, Any]:
+        svc = _svc(request)
+        guard_sensitive(request, svc.settings)
+        return _credentials_payload(svc)
+
+    @app.put("/api/live/credentials/{environment}")
+    async def put_credentials(request: Request, environment: str, body: LiveCredentialsIn) -> dict[str, Any]:
+        """Verify a key against Kalshi, then store it (write-only: it is never returned)."""
+        svc = _svc(request)
+        guard_sensitive(request, svc.settings)
+        if environment not in ENVIRONMENTS or svc.credentials is None:
+            raise HTTPException(404, f"unknown environment {environment!r} (demo or prod)")
+        if config_has_key(svc.settings) and environment == svc.settings.live.environment:
+            raise HTTPException(409, f"the {environment} key is set in config.yaml or KALSHIBOT_LIVE__* env "
+                                     "vars, which win; remove it there to manage it here")
+        try:
+            key = parse_private_key(body.private_key_pem)
+            key_id = body.api_key_id.strip()
+            signer = KalshiSigner(key_id, key)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        probe = make_probe(signer, environment, svc.settings)
+        try:
+            balance = await probe.balance_dollars()
+        except KalshiAuthError as e:
+            raise HTTPException(422, f"Kalshi {environment} rejected this key ({e.status}: {e.message}); "
+                                     "check the key id, and that the key belongs to the "
+                                     f"{'demo' if environment == 'demo' else 'production'} site") from None
+        except Exception as e:
+            raise HTTPException(502, f"could not verify the key with Kalshi ({type(e).__name__}); "
+                                     "nothing was saved") from None
+        finally:
+            await probe.aclose()
+        try:
+            svc.credentials.put(environment, key_id, body.private_key_pem)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        svc.engine.log("info", "live", f"Kalshi {environment} API key {mask_key_id(key_id)} "
+                       f"(fingerprint {fingerprint(key)}) saved from the dashboard")
+        activated = False
+        if is_live(svc) and environment == svc.settings.live.environment:
+            activated = await svc.broker.set_signer(signer, "dashboard")
+            svc.engine.publish_account()
+        return {**_credentials_payload(svc), "verified_balance": float(balance), "activated": activated}
+
+    @app.delete("/api/live/credentials/{environment}")
+    async def delete_credentials(request: Request, environment: str) -> dict[str, Any]:
+        svc = _svc(request)
+        guard_sensitive(request, svc.settings)
+        if environment not in ENVIRONMENTS or svc.credentials is None:
+            raise HTTPException(404, f"unknown environment {environment!r} (demo or prod)")
+        in_use = (is_live(svc) and environment == svc.settings.live.environment
+                  and svc.broker.credentials_source == "dashboard")
+        if in_use and svc.engine.status().get("running"):
+            raise HTTPException(409, "live trading is using this key: stop the engine first")
+        if not svc.credentials.delete(environment):
+            raise HTTPException(404, f"no {environment} key is stored in the dashboard")
+        svc.engine.log("warning", "live", f"Kalshi {environment} API key removed from the dashboard")
+        if in_use:
+            await svc.broker.set_signer(None, None)
+        return _credentials_payload(svc)
+
+    @app.post("/api/live/sync-cash")
+    async def live_sync_cash(request: Request) -> dict[str, Any]:
+        """Book the gap between the Kalshi balance and the ledger's cash as a deposit/withdrawal."""
+        svc = _live_svc(request)
+        try:
+            delta = await svc.broker.sync_cash_to_exchange()
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        svc.engine.publish_account()
+        return {"booked": float(delta), **svc.broker.live_status()}
 
     @app.patch("/api/account", response_model=Account)
     async def patch_account(request: Request, body: AccountPatch) -> dict[str, Any]:
@@ -867,10 +1071,6 @@ def create_app(
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
-    # -- Coinbase venue + overview (before the /api catch-all; contract §13) ------------
-
-    _mount_coinbase(app)
-
     # -- anything else under /api is a JSON 404 ----------------------------------------
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "PUT", "DELETE"], include_in_schema=False)
@@ -903,79 +1103,6 @@ def create_app(
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
-
-
-# --------------------------------------------------------------------------- Coinbase venue
-# Additive integration of the separate Coinbase spot PAPER venue (docs/COINBASE_CONTRACT.md
-# §13). Everything is wrapped so an import error, a bad config or a Coinbase outage can only
-# make /api/coinbase/* answer 503 - the Kalshi routes, engine and lifespan are unaffected.
-
-COINBASE_BUILD_TIMEOUT_S = 30.0
-#: cap on the Coinbase venue's shutdown (it runs next to Kalshi's, never before it)
-COINBASE_STOP_TIMEOUT_S = 10.0
-
-
-async def _start_coinbase(app: FastAPI, settings: Any, injected: Any, *, build: bool,
-                          autostart: bool | None) -> None:
-    app.state.cb = None
-    app.state.cb_error = None
-    cb = injected
-    try:
-        if cb is None:
-            if not build:
-                app.state.cb_error = "not started (Coinbase venue not built for this app)"
-                return
-            from kalshibot.coinbase.services import build_coinbase_services
-
-            cb = await asyncio.wait_for(build_coinbase_services(settings), COINBASE_BUILD_TIMEOUT_S)
-        cb.bind(asyncio.get_running_loop())
-        app.state.cb = cb
-    except Exception as e:
-        app.state.cb = None
-        app.state.cb_error = str(e) or type(e).__name__
-        log.warning("Coinbase venue unavailable (Kalshi unaffected): %s", app.state.cb_error)
-        return
-    try:
-        start = cb.autostart if autostart is None else autostart
-        if start:
-            await cb.engine.start()
-    except Exception as e:  # the venue stays browsable; its engine can be started from the UI
-        log.exception("Coinbase engine failed to start (Kalshi unaffected)")
-        with contextlib.suppress(Exception):
-            cb.engine.log("error", "engine", f"engine failed to start: {type(e).__name__}: {e}")
-
-
-async def _stop_coinbase(app: FastAPI) -> None:
-    cb = getattr(app.state, "cb", None)
-    if cb is None:
-        return
-    try:
-        await asyncio.wait_for(cb.aclose(), COINBASE_STOP_TIMEOUT_S)
-    except Exception:
-        log.exception("Coinbase venue shutdown failed (Kalshi shutdown continues)")
-
-
-def _mount_coinbase(app: FastAPI) -> None:
-    """``/api/coinbase/*`` and ``/api/overview``; each falls back to a stub if its module fails
-    to import (``/api/coinbase/*`` -> 503 with the import error)."""
-    try:
-        from kalshibot.coinbase.api import router as coinbase_router
-
-        app.include_router(coinbase_router, prefix="/api/coinbase")
-    except Exception as e:
-        log.exception("Coinbase API routes unavailable (Kalshi unaffected)")
-        why = f"Coinbase API failed to import: {type(e).__name__}: {e}"
-
-        @app.api_route("/api/coinbase/{rest:path}", methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
-                       include_in_schema=False)
-        async def coinbase_unavailable(rest: str) -> JSONResponse:
-            return JSONResponse({"detail": f"coinbase venue unavailable: {why}"}, status_code=503)
-    try:
-        from kalshibot.api.overview import router as overview_router
-
-        app.include_router(overview_router)
-    except Exception:
-        log.exception("GET /api/overview unavailable")
 
 
 PLACEHOLDER_HTML = """<!doctype html>

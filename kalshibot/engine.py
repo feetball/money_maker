@@ -65,7 +65,9 @@ the dashboard toggle saved in the store if set, else ``strategies.<name>.enabled
 config if set, else the class's ``enabled_by_default`` (``enabled_source`` in
 ``/api/strategies``: "dashboard" / "config" / "default").
 
-PAPER TRADING ONLY: orders go to :class:`~kalshibot.paper.broker.PaperBroker`.
+Orders go to the broker: :class:`~kalshibot.paper.broker.PaperBroker` (paper, the default) or
+:class:`~kalshibot.live.broker.LiveBroker` (``live.enabled``: real orders on Kalshi). In live mode
+the snapshot job also reconciles the ledger with the exchange balance and positions.
 """
 
 from __future__ import annotations
@@ -1284,6 +1286,12 @@ class Engine:
         if held:
             await self.md.orderbooks(held, max_age_s=self.broker.mark_max_age_s)
         await self.broker.record_equity_snapshot(refresh=True)
+        reconcile = getattr(self.broker, "reconcile", None)
+        if reconcile is not None:  # live: compare the ledger with the exchange (report only)
+            try:
+                await reconcile()
+            except Exception as e:
+                log.warning("live reconcile failed: %s", e)
         was = self.risk.kill_switch
         on = self.risk.evaluate(self.broker.portfolio())
         if on and not was:

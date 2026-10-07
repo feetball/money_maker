@@ -3,21 +3,18 @@
 This document is the **binding interface contract** for everyone building this repo.
 If code and this doc disagree, fix one of them explicitly — do not silently diverge.
 
-Hard rule: **PAPER TRADING ONLY.** No code path may place a real order or require
-Kalshi API credentials. Market data comes from Kalshi's public, unauthenticated REST
-API. (A future live mode is out of scope; do not scaffold it.)
+Paper trading is the default: market data comes from Kalshi's public, unauthenticated REST
+API and the paper broker (§6) simulates every fill. **Live trading** is opt-in (`live.enabled`):
+`kalshibot/live/broker.py::LiveBroker` subclasses `PaperBroker`, keeps its ledger, marks,
+settlement and persistence, and replaces the fill simulation with real orders
+(`kalshibot/kalshi/trading.py`, signed V2 `POST /portfolio/events/orders`) and real fill reports.
+See the `LiveBroker` module docstring and README "Live trading" for its rules (separate database,
+order persisted before it is sent, no blind resend, whole-contract booking, no baskets,
+report-only reconciliation).
 
 Kalshi API facts (formats, fees, lifecycle, rate limits) live in
 [`docs/kalshi_api_notes.md`](kalshi_api_notes.md). Empirical strategy research lives in
 `research/`.
-
-**Second venue (Coinbase spot crypto).** This document covers the Kalshi venue. A second,
-fully separate paper venue for Coinbase spot lives in `kalshibot/coinbase/`. It has its own
-account, SQLite file, engine, risk limits and kill switch, plus `/api/coinbase/*`,
-`/api/coinbase/stream` and the cross-venue `GET /api/overview`. Its binding contract is
-[`docs/COINBASE_CONTRACT.md`](COINBASE_CONTRACT.md). That contract lists the only
-integration points in Kalshi files (`api/server.py`, `config.py`, `cli.py`,
-`config.example.yaml`). Everything else in this document is unchanged by it.
 
 ---
 

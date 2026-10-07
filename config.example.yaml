@@ -186,6 +186,9 @@ analytics:
 server:
   host: 127.0.0.1
   port: 8765
+  # Host names, besides localhost, that may manage API keys from the dashboard (e.g. a LAN name if
+  # you open it from another machine). The dashboard has no login: keep it on localhost if you can.
+  allowed_hosts: []
 
 storage:
   # SQLite file of the paper account. A relative path is relative to THIS file's directory.
@@ -193,79 +196,31 @@ storage:
   # `kalshibot serve` runs - reset from the dashboard (POST /api/account/reset) instead.
   path: data/kalshibot.sqlite3
 
-# Coinbase spot crypto - a SECOND, fully separate PAPER venue (docs/COINBASE_CONTRACT.md).
-# Own $ paper account, SQLite file, engine, kill switch and risk limits; public market data only
-# (never real orders, never API keys). Everything below is the built-in default, so this section
-# may stay commented out; uncomment and edit to change it. An invalid coinbase section disables
-# only the Coinbase venue (the reason is shown in the dashboard) - Kalshi keeps running.
-# Env overrides: KALSHIBOT_COINBASE__<KEY>, e.g. KALSHIBOT_COINBASE__ENABLED=false.
-# coinbase:
-#   enabled: true
-#   base_url: https://api.exchange.coinbase.com   # Coinbase Exchange public REST (no auth)
-#   max_rps: 3              # public limit: 10 req/s per IP (burst 15), shared by everything on this host
-#   timeout: 10             # seconds per HTTP request
-#   starting_balance: 1000  # Coinbase paper USD cash at start / after reset (separate from Kalshi's)
-#   # Fee tier (kalshibot/coinbase/fees.py, docs/coinbase_api_notes.md §3). Fees are charged in USD on
-#   # every fill and rounded up to the cent. intro = Coinbase Advanced "Intro" tier for US accounts,
-#   # 0.50% maker / 0.90% taker since 2026-09-16 (a taker round trip costs 1.80%); intro_eu
-#   # (0.25/0.50), intro_intl (0.09/0.10), intro_pre_2026_09 (0.60/1.20, a pessimistic check),
-#   # vip_8 (0.00/0.02). Higher-tier rates are shown only on your signed-in Coinbase fee page: put
-#   # them in fee_rates, which win over fee_tier.
-#   fee_tier: intro
-#   # fee_rates: {maker: 0.005, taker: 0.009}
-#   storage_path: data/coinbase.sqlite3   # relative to THIS file's directory, like storage.path
-#   paper:
-#     max_slippage_bps: 100          # market orders stop walking the book this far past the best price
-#     consumed_liquidity_ttl_s: 300  # displayed depth we took stays used up this long
-#     default_gtc_expiry_s: 3600     # resting orders expire after this unless the strategy says otherwise
-#     fill_on_book_cross: false      # true: a book crossing a resting order's limit fills it with no print
-#   engine:
-#     autostart: true
-#     bar_delay_s: 60          # run strategies this long after each bar closes
-#     maintenance_s: 15        # resting-order fills (from public trades) + expiries
-#     snapshot_s: 60           # marks + equity snapshot
-#     products_refresh_s: 3600
-#     maker_timeout_s: 120     # maker_then_taker: rest post-only this long, then take the rest
-#   risk:
-#     max_position_pct_per_product: 50  # % of Coinbase equity in one product
-#     max_total_exposure_pct: 90        # % of Coinbase equity invested
-#     max_strategy_allocation_pct: 50   # % per strategy without its own max_allocation_pct
-#     min_cash_reserve: 20              # $ never spent
-#     max_orders_per_minute: 20
-#     daily_loss_limit: 100             # $; trips the Coinbase kill switch (blocks buys; sells allowed)
-#     max_spread_bps: 50                # skip products with a wider bid/ask spread
-#     min_trade_usd: 10                 # skip smaller rebalance trades
-#   # Per-strategy settings: {<name>: {enabled: bool, params: {...}, max_allocation_pct: %}}
-#   # (names: kalshibot.coinbase.strategies.REGISTRY). Which run: the dashboard toggle, else
-#   # `enabled:` here, else the built-in default - all three below are ON by default, so a
-#   # config.yaml with no coinbase section (or `strategies: {}`) runs them; set `enabled: false`
-#   # (or flip the switch) to turn one off. max_allocation_pct = the strategy's slice, % of
-#   # Coinbase equity. Both BTC strategies share max_position_pct_per_product (50%): keep
-#   # btc_trend + btc_hold well under it, or btc_trend's entries get sized down once btc_hold's
-#   # BTC has gained. An allocation change applies at a strategy's next entry (btc_trend and
-#   # btc_hold never resize a held position). Evidence (research/coinbase/FINDINGS.md): nothing
-#   # beat simply holding BTC after retail fees; these are forward paper-tests.
-#   strategies: {}   # {} = the built-in values below; to change one, list it here, e.g.
-#   #   # PRIMARY. Risk overlay, not an edge: 100% BTC above 1.02xSMA100, cash below 0.98xSMA100
-#   #   # (research 29.1 vs 28.6%/yr for holding BTC, half the drawdown). Timing-sensitive: decides
-#   #   # at the 00:00 UTC daily close; acting a day late cost ~7 pts/yr.
-#   #   btc_trend:
-#   #     enabled: true
-#   #     max_allocation_pct: 25        # $250 of a $1,000 account
-#   #     params: {}
-#   #     #   sma_n: 100                # researched; neighbours tested mostly worse
-#   #     #   buffer: 0.02
-#   #     #   execution: taker          # taker | maker_then_taker (maker fills untested)
-#   #   # BENCHMARK. Buys BTC once and holds it: the bar the others have to beat.
-#   #   btc_hold:
-#   #     enabled: true
-#   #     max_allocation_pct: 15
-#   #   # EXPERIMENTAL. ETH above its 200-day SMA, sized to 50% annualized volatility; cash below.
-#   #   # Beat holding ETH but trailed holding BTC by ~8-10 pts/yr in research.
-#   #   eth_trend_vt:
-#   #     enabled: true
-#   #     max_allocation_pct: 25
-#   #     params: {}
-#   #     #   sma_n: 200
-#   #     #   target_vol: 0.50
-#   #     #   vol_window: 30
+# LIVE TRADING (real orders on Kalshi). Off by default; everything above then runs on paper.
+# With `enabled: true`, `kalshibot serve` sends every approved order to Kalshi (kalshibot/live/broker.py):
+#   - the ledger moves to live.storage_path (paper history stays in storage.path) and starts at your
+#     Kalshi balance; market data is read from the same environment (kalshi.base_url is overridden);
+#   - the engine does NOT start by itself unless live.autostart is true: press Start in the dashboard;
+#   - baskets (no_basket_arb) are rejected: Kalshi has no atomic multi-leg order;
+#   - every order is also checked against the hard caps below, after the risk limits.
+# Get an API key at kalshi.com (Account -> API keys; demo: demo.kalshi.co). Keep the private key file
+# out of git (*.pem is ignored). Check the setup without trading: `uv run kalshibot live-check`.
+# Env overrides: KALSHIBOT_LIVE__ENABLED=true, KALSHIBOT_LIVE__API_KEY_ID=..., and the key itself as
+# KALSHIBOT_LIVE__PRIVATE_KEY_PEM (PEM text; "\n" escapes are accepted) instead of a file.
+live:
+  enabled: false
+  environment: demo           # demo = demo-api.kalshi.co (fake money); prod = REAL MONEY
+  # Easiest: leave these empty and add the key in the dashboard (Settings -> Kalshi API keys); it
+  # is verified with Kalshi and stored write-only in secrets_path (owner-only file under data/).
+  # A key set here (or via env) wins over the dashboard's.
+  api_key_id: ""
+  private_key_path: ""        # e.g. keys/kalshi-demo.pem (relative to THIS file's directory)
+  secrets_path: data/secrets/kalshi-keys.json
+  storage_path: data/kalshibot-live.sqlite3
+  max_order_contracts: 100    # hard cap per order (contracts)
+  max_order_cost: 100         # hard cap per order ($ = contracts x limit price)
+  # taker intents: fill_or_kill (all or nothing; never a fractional fill) or immediate_or_cancel
+  # (partial fills; a fractional remainder is logged and kept out of the whole-contract ledger)
+  taker_time_in_force: fill_or_kill
+  autostart: false
+  # subaccount: 1             # trade in a Kalshi subaccount (default: primary)

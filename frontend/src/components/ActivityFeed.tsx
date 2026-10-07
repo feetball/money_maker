@@ -7,7 +7,6 @@ import { fmtCents, fmtInt, fmtPnl, fmtUsd, parseTs, pnlTone, sideLabel } from ".
 import { useStreamEvents, useStreamInfo } from "../lib/stream";
 import { ErrorBlock, Segmented, Switch } from "./ui";
 import { decisionLabel, Time } from "./values";
-import { VenueBadge } from "./Venue";
 
 type FeedFilter = "all" | "trades" | "logs" | "problems";
 
@@ -199,8 +198,6 @@ export function ActivityFeed({ maxItems = 150, height = 420 }: { maxItems?: numb
               <span className="feed-dot" aria-hidden="true" />
               <div className="feed-main">
                 <div className="feed-line">
-                  {/* Kalshi's stream + log history only (Coinbase has its own feed). */}
-                  <VenueBadge venue="kalshi" />
                   <span className="feed-kind">{it.kind}</span>
                   <Time value={it.ts} seconds />
                 </div>

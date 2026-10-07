@@ -19,9 +19,10 @@ import {
   normEquity,
   normFill,
   normList,
+  normCredentials,
+  normLive,
   normLog,
   normOrder,
-  normOverview,
   normRisk,
   normSettlement,
   normSignal,
@@ -31,8 +32,6 @@ import {
   isObj,
   obj,
   str,
-  COMBINED_NOTE,
-  VENUE_LABELS,
 } from "./normalize";
 import {
   STREAM_EVENT_TYPES,
@@ -49,13 +48,15 @@ import {
   type EquityRange,
   type Fill,
   type Id,
+  type CredentialsResponse,
+  type KalshiEnv,
   type KillSwitchRequest,
+  type LiveStatus,
   type LogEntry,
   type MarketRow,
   type MarketsQuery,
   type Order,
   type OrderStatusFilter,
-  type OverviewResponse,
   type Position,
   type RiskPatch,
   type RiskResponse,
@@ -188,17 +189,11 @@ function looksUnreachable(res: Response, text: string): boolean {
   return res.status === 500 && text.trim() === "" && (ctype === "" || ctype.startsWith("text/plain"));
 }
 
-export type Method = "GET" | "POST" | "PATCH" | "DELETE";
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-/**
- * Raw JSON request against `/api` + `path` (path starts with "/", e.g. "/coinbase/status").
- * Shared by every venue client: same timeout, error kinds and lenient JSON parsing. In
- * mock mode it is answered by mock.ts (which forwards "/coinbase/*" to the Coinbase
- * mock when that module exists).
- */
-export async function apiRequest(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
-  return request(method, path, body, signal);
-}
+/** Sent on every request. The server requires it for API-key endpoints: a page on another site
+ * cannot add a custom header without a CORS preflight, which this server never approves. */
+const CSRF_HEADERS = { "X-Kalshibot-Request": "1" };
 
 async function request(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
   if (IS_MOCK) {
@@ -227,8 +222,8 @@ async function request(method: Method, path: string, body?: unknown, signal?: Ab
         method,
         headers:
           body === undefined
-            ? { Accept: "application/json" }
-            : { Accept: "application/json", "Content-Type": "application/json" },
+            ? { Accept: "application/json", ...CSRF_HEADERS }
+            : { Accept: "application/json", "Content-Type": "application/json", ...CSRF_HEADERS },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: ctrl.signal,
         cache: "no-store",
@@ -301,6 +296,20 @@ export const api = {
     return request("POST", "/engine/kill-switch", body).then(normStatus);
   },
 
+  // --- live trading (404 in paper mode) ---
+  live: (o?: ReqOpts): Promise<LiveStatus> => request("GET", "/live", undefined, o?.signal).then(normLive),
+  liveReconcile: (): Promise<LiveStatus> => request("POST", "/live/reconcile", {}).then(normLive),
+  liveSyncCash: (): Promise<LiveStatus & { booked: number }> =>
+    request("POST", "/live/sync-cash", {}).then((v) => ({ ...normLive(v), booked: Number(obj(v).booked) || 0 })),
+
+  // --- Kalshi API keys (write-only: the private key is never returned) ---
+  credentials: (o?: ReqOpts): Promise<CredentialsResponse> =>
+    request("GET", "/live/credentials", undefined, o?.signal).then(normCredentials),
+  putCredentials: (env: KalshiEnv, apiKeyId: string, privateKeyPem: string): Promise<CredentialsResponse> =>
+    request("PUT", `/live/credentials/${env}`, { api_key_id: apiKeyId, private_key_pem: privateKeyPem }).then(normCredentials),
+  deleteCredentials: (env: KalshiEnv): Promise<CredentialsResponse> =>
+    request("DELETE", `/live/credentials/${env}`).then(normCredentials),
+
   // --- account ---
   account: (o?: ReqOpts): Promise<Account> => request("GET", "/account", undefined, o?.signal).then(normAccount),
   resetAccount: (startingBalance?: number): Promise<Account> => {
@@ -359,101 +368,7 @@ export const api = {
     request("POST", "/backtests", req).then(normBacktestCreate),
   backtest: (id: Id, o?: ReqOpts): Promise<BacktestDetail> =>
     request("GET", `/backtests/${enc(id)}`, undefined, o?.signal).then(normBacktestDetail),
-
-  // --- both venues (COINBASE_CONTRACT §13) ---
-  /**
-   * GET /api/overview. An older backend without the endpoint (404, or the SPA fallback
-   * answering with HTML) gets a Kalshi-only overview assembled from /status, /account
-   * and /equity, with Coinbase marked unavailable, so the shell keeps working.
-   */
-  overview: async (o?: ReqOpts): Promise<OverviewResponse> => {
-    // An older server is re-probed once a minute, not on every 5 s poll.
-    if (Date.now() < overviewMissingUntil) return synthesizeOverview(o?.signal);
-    try {
-      const r = normOverview(await request("GET", "/overview", undefined, o?.signal));
-      overviewMissingUntil = 0;
-      return r;
-    } catch (e) {
-      if (!(e instanceof ApiError) || e.kind !== "http" || !(e.status === 404 || /received HTML/.test(e.detail))) throw e;
-      overviewMissingUntil = Date.now() + 60_000;
-      return synthesizeOverview(o?.signal);
-    }
-  },
 };
-
-let overviewMissingUntil = 0;
-
-/** Equity history for the synthesized overview, refetched at most once a minute. */
-let fallbackEquity: { at: number; points: EquityPoint[] } | null = null;
-
-async function synthesizeOverview(signal?: AbortSignal): Promise<OverviewResponse> {
-  const cached = fallbackEquity && Date.now() - fallbackEquity.at < 60_000 ? fallbackEquity.points : null;
-  const [status, account, equity] = await Promise.all([
-    api.status({ signal }),
-    api.account({ signal }),
-    cached ??
-      api.equity("30d", { signal }).then(
-        (points) => {
-          fallbackEquity = { at: Date.now(), points };
-          return points;
-        },
-        () => [] as EquityPoint[],
-      ),
-  ]);
-  const unavailable = "The running server has no Coinbase backend (GET /api/overview is missing), so restarting it will not help. Rebuild and redeploy once the Coinbase backend is in the code (Docker: ./deploy.sh update).";
-  return {
-    generated_at: status.server_time,
-    synthesized: true,
-    venues: {
-      kalshi: {
-        venue: "kalshi",
-        label: VENUE_LABELS.kalshi,
-        available: true,
-        unavailable_reason: null,
-        engine_running: status.engine.running,
-        kill_switch: status.engine.kill_switch,
-        starting_balance: account.starting_balance,
-        equity: account.equity,
-        cash: account.cash,
-        total_pnl: account.total_pnl,
-        total_return_pct: account.total_return_pct,
-        todays_pnl: account.todays_pnl,
-        open_positions: account.open_positions,
-        fees_paid: account.fees_paid,
-        last_error: status.engine.last_error,
-        last_error_at: status.engine.last_error_at,
-        last_tick_at: status.engine.last_tick_at,
-      },
-      coinbase: {
-        venue: "coinbase",
-        label: VENUE_LABELS.coinbase,
-        available: false,
-        unavailable_reason: unavailable,
-        engine_running: false,
-        kill_switch: false,
-        starting_balance: null,
-        equity: null,
-        cash: null,
-        total_pnl: null,
-        total_return_pct: null,
-        todays_pnl: null,
-        open_positions: null,
-        fees_paid: null,
-        last_error: null,
-        last_error_at: null,
-        last_tick_at: null,
-      },
-    },
-    combined: {
-      starting_balance: account.starting_balance,
-      equity: account.equity,
-      total_pnl: account.total_pnl,
-      total_return_pct: account.total_return_pct,
-      note: COMBINED_NOTE,
-    },
-    equity_series: { kalshi: equity.map((p) => ({ ts: p.ts, equity: p.equity })), coinbase: [] },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Server-Sent Events

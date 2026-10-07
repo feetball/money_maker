@@ -78,28 +78,6 @@
   /* paper badge */
   --paper-bg: #fab219;
   --paper-text: #1a1206;
-
-  /*
-   * Venues (docs/COINBASE_CONTRACT.md §14): Kalshi = teal, Coinbase = violet. Deliberately
-   * away from P&L blue/red, status green/amber/orange and the accent blue. Always paired
-   * with a text label + monogram (components/Venue.tsx), never colour alone.
-   *   --venue-*       marks: borders, chart lines, nav indicator, monogram square
-   *                   (≥ 4.3:1 on every dark surface; the pair passes the dataviz
-   *                   validator: CVD ΔE 13.0, normal-vision ΔE 22.1)
-   *   --venue-*-bg    tint behind badges / banners / the active nav group
-   *   --venue-*-text  text on the tint or a surface (≥ 4.7:1 on tint over every surface)
-   *   --venue-*-on    monogram glyph on the --venue-* square (≥ 4.5:1: dark glyph, except
-   *                   white on the light-theme Coinbase violet, 5.6:1)
-   * Mirrored as hex in lib/venueColors.ts for recharts (SVG attributes cannot read var()).
-   */
-  --venue-kalshi: #19a6a1;
-  --venue-kalshi-bg: rgba(25, 166, 161, 0.15);
-  --venue-kalshi-text: #3cc9c3;
-  --venue-coinbase: #9a7cf2;
-  --venue-coinbase-bg: rgba(154, 124, 242, 0.16);
-  --venue-coinbase-text: #b39cf6;
-  --venue-kalshi-on: #0d0d0d;
-  --venue-coinbase-on: #0d0d0d;
 }
 
 @media (prefers-color-scheme: light) {
@@ -137,15 +115,6 @@
     --yes-bg: rgba(42, 120, 214, 0.11);
     --no-text: #a8501f;
     --no-bg: rgba(236, 131, 90, 0.16);
-    /* venues (light): text ≥ 4.5:1 on tint over every light surface; marks ≥ 3.1:1 */
-    --venue-kalshi: #00918b;
-    --venue-kalshi-bg: rgba(0, 145, 139, 0.12);
-    --venue-kalshi-text: #006b66;
-    --venue-coinbase: #6e4fd6;
-    --venue-coinbase-bg: rgba(110, 79, 214, 0.12);
-    --venue-coinbase-text: #5535be;
-    --venue-kalshi-on: #0d0d0d;
-    --venue-coinbase-on: #ffffff;
   }
 }
 
@@ -183,13 +152,4 @@
   --yes-bg: rgba(42, 120, 214, 0.11);
   --no-text: #a8501f;
   --no-bg: rgba(236, 131, 90, 0.16);
-  /* venues (light): text ≥ 4.5:1 on tint over every light surface; marks ≥ 3.1:1 */
-  --venue-kalshi: #00918b;
-  --venue-kalshi-bg: rgba(0, 145, 139, 0.12);
-  --venue-kalshi-text: #006b66;
-  --venue-coinbase: #6e4fd6;
-  --venue-coinbase-bg: rgba(110, 79, 214, 0.12);
-  --venue-coinbase-text: #5535be;
-  --venue-kalshi-on: #0d0d0d;
-  --venue-coinbase-on: #ffffff;
 }
