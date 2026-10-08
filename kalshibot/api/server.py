@@ -74,6 +74,7 @@ from kalshibot.api.schemas import (
     KillSwitchRequest,
     LiveCredentialsIn,
     LogOut,
+    ModeSwitchRequest,
     MarketRow,
     OrderOut,
     PositionOut,
@@ -84,7 +85,13 @@ from kalshibot.api.schemas import (
     StrategyOut,
     StrategyPatch,
 )
-from kalshibot.config import DEFAULT_MIN_TRADES_BY_STRATEGY, Settings, load_settings
+from kalshibot.config import (
+    DEFAULT_MIN_TRADES_BY_STRATEGY,
+    Settings,
+    load_settings,
+    settings_for_mode,
+    write_mode_file,
+)
 from kalshibot.engine import STREAM_EVENT_TYPES, Engine, EventBus, jsonable
 from kalshibot.feeds import FeedRegistry, build_feeds
 from kalshibot.kalshi.client import KalshiClient
@@ -182,6 +189,9 @@ def build_services(
                                     timeout=settings.kalshi.timeout)
     md = MarketDataService(client, settings, clock=clock)
     credentials = CredentialStore(settings.live.secrets_path)
+    if not settings.live.enabled:  # remember where paper lives, to switch back to it later
+        settings.paper_storage_path = settings.storage.path
+        settings.paper_base_url = settings.kalshi.base_url
     if settings.live.enabled:
         source = None
         if trader is None:
@@ -199,10 +209,14 @@ def build_services(
                        engine=engine, feeds=feeds, bus=bus, trader=trader, credentials=credentials)
 
 
-def config_has_key(settings: Settings) -> bool:
-    """A key is set in config.yaml / KALSHIBOT_LIVE__* (it then wins over dashboard keys)."""
+def config_has_key(settings: Settings, environment: str | None = None) -> bool:
+    """A key for ``environment`` (default: the active one) is set in config.yaml /
+    KALSHIBOT_LIVE__*; it then wins over the dashboard's. Such a key belongs to the environment
+    configured there, never to the other one."""
     live = settings.live
-    return bool(live.api_key_id and (live.private_key_path or live.private_key_pem))
+    env = environment or live.environment
+    key_env = settings.config_environment or live.environment
+    return bool(live.api_key_id and (live.private_key_path or live.private_key_pem)) and env == key_env
 
 
 def resolve_signer(settings: Settings, store: CredentialStore | None) -> tuple[KalshiSigner | None, str | None]:
@@ -227,6 +241,20 @@ def build_trader(settings: Settings, store: CredentialStore | None = None
     client = KalshiTradingClient(signer, base_url_for(live.environment), read_rps=live.read_rps,
                                  write_rps=live.write_rps, subaccount=live.subaccount)
     return client, source
+
+
+def seed_ledger(src: Store, dst: Store) -> bool:
+    """A brand-new ledger (no fills, no strategy or risk overrides) starts with the strategy
+    toggles/params and risk limits of the mode being left, so switching to real money never
+    re-enables a strategy that was switched off. Returns whether anything was copied."""
+    if dst.max_id("fills") or dst.list_strategy_states() or dst.get_risk_limits():
+        return False
+    states, limits = src.list_strategy_states(), src.get_risk_limits()
+    for name, st in states.items():
+        dst.save_strategy_state(name, enabled=st.get("enabled"), params=st.get("params"))
+    if limits:
+        dst.save_risk_limits(limits)
+    return bool(states or limits)
 
 
 def make_probe(signer: KalshiSigner, environment: str, settings: Settings) -> KalshiTradingClient:
@@ -286,6 +314,8 @@ def _now(svc: AppServices) -> datetime:
 def status_payload(svc: AppServices) -> dict[str, Any]:
     return {
         "mode": "live" if is_live(svc) else "paper",
+        "trading_mode": svc.settings.trading_mode,
+        "mode_source": svc.settings.mode_source,
         "live": svc.broker.live_status() if is_live(svc) else None,
         "engine": svc.engine.status(),
         "exchange": {"trading_active": svc.md.trading_active, "error": svc.md.exchange_error},
@@ -521,27 +551,38 @@ def create_app(
     services: AppServices | None = None,
     autostart: bool | None = None,
     frontend_dist: Path | None = None,
+    service_factory: Callable[[Settings], AppServices] | None = None,
 ) -> FastAPI:
-    """The ASGI app. ``services`` (tests) skips building the production stack."""
+    """The ASGI app. ``services`` (tests) skips building the production stack.
+    ``service_factory`` builds the stack for another trading mode (default :func:`build_services`)."""
     settings = settings or (services.settings if services is not None else load_settings())
     dist = DIST if frontend_dist is None else frontend_dist
+    factory = service_factory or build_services
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        svc = services or build_services(settings)
-        app.state.svc = svc
+    async def prepare(svc: AppServices) -> bool:
+        """Bind a freshly built stack to the loop; for live, check the key and resolve orders a
+        previous run left open. Returns whether it may trade (paper: always)."""
         svc.bus.bind(asyncio.get_running_loop())
         with contextlib.suppress(Exception):
             _fail_interrupted_backtests(svc.store)
+        if not is_live(svc):
+            return True
+        # without a working key the server still starts, locked, so the key can be added in Settings
+        ready = await svc.broker.start()
+        if ready:
+            log.warning("LIVE TRADING (%s): orders go to Kalshi", svc.settings.live.environment)
+        else:
+            log.error("live trading is locked: %s", svc.broker.blocked_reason)
+        return ready
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        svc = services or factory(settings)
+        app.state.svc = svc
+        app.state.mode_lock = asyncio.Lock()
         app.state.stopping = False
+        ready = await prepare(svc)
         if is_live(svc):
-            # checks the key, resolves orders a previous run left open; without a working key the
-            # server still starts, locked, so the key can be added in Settings
-            ready = await svc.broker.start()
-            if ready:
-                log.warning("LIVE TRADING (%s): orders go to Kalshi", svc.settings.live.environment)
-            else:
-                log.error("live trading is locked: %s", svc.broker.blocked_reason)
             start = (settings.live.autostart if autostart is None else autostart) and ready
         else:
             start = settings.engine.autostart if autostart is None else autostart
@@ -551,7 +592,7 @@ def create_app(
             yield
         finally:
             app.state.stopping = True
-            await svc.aclose()
+            await app.state.svc.aclose()  # the current stack (a mode switch may have replaced it)
 
     live = bool(settings.live.enabled)
     app = FastAPI(title=f"kalshibot ({'LIVE' if live else 'paper'} trading)", version=__version__,
@@ -654,12 +695,77 @@ def create_app(
         await svc.broker.reconcile()
         return svc.broker.live_status()
 
+    # -- trading mode (paper / demo / prod) -----------------------------------------------
+
+    def _mode_payload(svc: AppServices) -> dict[str, Any]:
+        st = svc.settings
+        keys = {env: bool(config_has_key(st, env) or (svc.credentials is not None and svc.credentials.get(env)))
+                for env in ENVIRONMENTS}
+        out: dict[str, Any] = {
+            "mode": st.trading_mode, "source": st.mode_source, "keys": keys,
+            "engine_running": bool(svc.engine.status().get("running")),
+            "open_live_orders": len(svc.broker.open_orders()) if is_live(svc) else 0,
+            "ready": svc.broker.ready if is_live(svc) else True,
+            "blocked_reason": svc.broker.blocked_reason if is_live(svc) else None,
+        }
+        return out
+
+    @app.get("/api/mode")
+    async def get_mode(request: Request) -> dict[str, Any]:
+        return _mode_payload(_svc(request))
+
+    @app.post("/api/mode")
+    async def set_mode(request: Request, body: ModeSwitchRequest) -> dict[str, Any]:
+        """Switch between paper, demo and real-money trading without a restart. The engine is
+        stopped; the new mode's ledger, API and broker replace the old ones; the choice is saved
+        (``live.mode_path``) and survives restarts."""
+        svc = _svc(request)
+        guard_sensitive(request, svc.settings)
+        target = body.mode
+        if target == "prod" and (body.confirm or "").strip().upper() != "REAL MONEY":
+            raise HTTPException(422, 'switching to real money needs confirm: "REAL MONEY"')
+        async with request.app.state.mode_lock:
+            svc = _svc(request)
+            current = svc.settings.trading_mode
+            if target == current:
+                write_mode_file(svc.settings.live.mode_path, target)
+                svc.settings.mode_source = "dashboard"
+                return _mode_payload(svc)
+            if is_live(svc) and svc.broker.open_orders():
+                n = len(svc.broker.open_orders())
+                raise HTTPException(409, f"{n} order(s) are still resting on Kalshi; cancel them first "
+                                         "(Positions & Orders) so nothing fills while the bot is not watching")
+            new_settings = settings_for_mode(svc.settings, target)
+            if target != "paper" and resolve_signer(new_settings, svc.credentials)[0] is None:
+                raise HTTPException(409, f"no Kalshi {target} API key: add one under Kalshi API keys first")
+            try:
+                new = factory(new_settings)
+                if seed_ledger(svc.store, new.store):
+                    # the engine and risk manager read these when built: build again on the seeded ledger
+                    await new.aclose()
+                    new = factory(new_settings)
+            except Exception as e:
+                raise HTTPException(409, f"could not open the {target} ledger: {e}") from None
+            await svc.engine.stop()  # nothing trades on the old stack from here on
+            if not await prepare(new):
+                reason = new.broker.blocked_reason if is_live(new) else "not ready"
+                await new.aclose()
+                raise HTTPException(409, f"stayed in {current} mode (engine stopped): {reason}")
+            new_settings.mode_source = "dashboard"
+            write_mode_file(new_settings.live.mode_path, target)
+            request.app.state.svc = new
+            await svc.aclose()
+            new.engine.log("warning", "mode", f"trading mode switched from {current} to {target} via the "
+                           "dashboard; the engine is stopped until you start it")
+            log.warning("trading mode switched from %s to %s", current, target)
+            return _mode_payload(new)
+
     def _credentials_payload(svc: AppServices) -> dict[str, Any]:
         st = svc.settings
         store = svc.credentials
         envs: dict[str, Any] = {}
         for env in ENVIRONMENTS:
-            if config_has_key(st) and env == st.live.environment:
+            if config_has_key(st, env):
                 envs[env] = {"source": "config", "api_key_id": mask_key_id(st.live.api_key_id),
                              "fingerprint": None, "saved_at": None}
             else:
@@ -684,7 +790,7 @@ def create_app(
         guard_sensitive(request, svc.settings)
         if environment not in ENVIRONMENTS or svc.credentials is None:
             raise HTTPException(404, f"unknown environment {environment!r} (demo or prod)")
-        if config_has_key(svc.settings) and environment == svc.settings.live.environment:
+        if config_has_key(svc.settings, environment):
             raise HTTPException(409, f"the {environment} key is set in config.yaml or KALSHIBOT_LIVE__* env "
                                      "vars, which win; remove it there to manage it here")
         try:
@@ -1046,6 +1152,8 @@ def create_app(
                 while max_events is None or sent < max_events:
                     if getattr(request.app.state, "stopping", False):
                         break  # server shutting down: end the stream so shutdown is not held up
+                    if request.app.state.svc is not svc:
+                        break  # trading mode switched: the client reconnects to the new stack
                     timeout = 1.0
                     if deadline is not None:
                         timeout = min(timeout, deadline - time.monotonic())

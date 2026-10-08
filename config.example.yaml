@@ -197,7 +197,9 @@ storage:
   path: data/kalshibot.sqlite3
 
 # LIVE TRADING (real orders on Kalshi). Off by default; everything above then runs on paper.
-# With `enabled: true`, `kalshibot serve` sends every approved order to Kalshi (kalshibot/live/broker.py):
+# Switch modes from the dashboard (Settings -> Trading mode: Paper / Demo / Real money) or here.
+# A choice made in the dashboard is saved in mode_path and wins over enabled/environment below.
+# In a live mode, `kalshibot serve` sends every approved order to Kalshi (kalshibot/live/broker.py):
 #   - the ledger moves to live.storage_path (paper history stays in storage.path) and starts at your
 #     Kalshi balance; market data is read from the same environment (kalshi.base_url is overridden);
 #   - the engine does NOT start by itself unless live.autostart is true: press Start in the dashboard;
@@ -216,7 +218,8 @@ live:
   api_key_id: ""
   private_key_path: ""        # e.g. keys/kalshi-demo.pem (relative to THIS file's directory)
   secrets_path: data/secrets/kalshi-keys.json
-  storage_path: data/kalshibot-live.sqlite3
+  storage_path: data/kalshibot-live-{environment}.sqlite3   # one ledger per environment
+  mode_path: data/trading-mode.json   # the dashboard's mode switch; when present it wins over enabled/environment
   max_order_contracts: 100    # hard cap per order (contracts)
   max_order_cost: 100         # hard cap per order ($ = contracts x limit price)
   # taker intents: fill_or_kill (all or nothing; never a fractional fill) or immediate_or_cancel

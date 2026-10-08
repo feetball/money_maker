@@ -271,22 +271,25 @@ works exactly as in paper mode, but from Kalshi's real fills and fees.
 
 1. Create an API key on Kalshi (Account → API keys). Start on the **demo** exchange
    (`demo.kalshi.co`, fake money) with its own key.
-2. Turn live mode on in `config.yaml` and restart:
-   ```yaml
-   live:
-     enabled: true
-     environment: demo          # prod = real money
-     max_order_contracts: 100   # hard per-order caps, checked after the risk limits
-     max_order_cost: 100
-   ```
-3. Add the key in the dashboard: **Settings → Kalshi API keys**. Choose the exchange, enter the
-   key ID and upload the `.pem` file (or paste it). The server checks the key against Kalshi
-   and only saves it if Kalshi accepts it. Live trading unlocks at once, with no restart.
-   Until a key works, the top bar says live trading is **locked**: orders are refused and the
-   engine cannot start.
-4. The top bar shows **LIVE · DEMO** or **LIVE · REAL MONEY**. The engine stays stopped until
-   you press Start (`live.autostart: false`). Review which strategies are enabled and the risk
-   limits first.
+2. Add the key in the dashboard: **Settings → Kalshi API keys**. Choose the exchange, enter the
+   key ID and upload the `.pem` file (or paste it). The server checks the key with Kalshi and
+   only saves it if Kalshi accepts it.
+3. Switch modes in **Settings → Trading mode**: **Paper**, **Demo** (real orders, fake money)
+   or **Real money**. Real money asks you to type `REAL MONEY`. A switch takes effect at once,
+   with no restart:
+   - The engine stops. Each mode has its own ledger (`data/kalshibot.sqlite3`,
+     `data/kalshibot-live-demo.sqlite3`, `data/kalshibot-live-prod.sqlite3`), so history
+     never mixes. Switching back brings a mode's positions and analytics back.
+   - A new live ledger starts at your Kalshi balance and copies the strategy switches and
+     risk limits of the mode you left, so a strategy you turned off stays off.
+   - Leaving a live mode is refused while orders rest on Kalshi; cancel them first. Open
+     positions stay on Kalshi and settle; their P&L is booked when you switch back.
+   - If the key is refused, nothing changes: you stay in the old mode.
+   - The choice is saved in `data/trading-mode.json` and survives restarts. It wins over
+     `live.enabled` / `live.environment` in `config.yaml`; delete the file to go back to
+     the config.
+4. The top bar shows **PAPER TRADING**, **LIVE · DEMO** or **LIVE · REAL MONEY**. After a
+   switch, review the Strategies page and the risk limits, then press Start.
 
 **Where keys are kept, and how they stay safe**
 

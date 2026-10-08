@@ -21,6 +21,7 @@ import {
   normList,
   normCredentials,
   normLive,
+  normMode,
   normLog,
   normOrder,
   normRisk,
@@ -51,6 +52,8 @@ import {
   type CredentialsResponse,
   type KalshiEnv,
   type KillSwitchRequest,
+  type ModeResponse,
+  type TradingMode,
   type LiveStatus,
   type LogEntry,
   type MarketRow,
@@ -301,6 +304,11 @@ export const api = {
   liveReconcile: (): Promise<LiveStatus> => request("POST", "/live/reconcile", {}).then(normLive),
   liveSyncCash: (): Promise<LiveStatus & { booked: number }> =>
     request("POST", "/live/sync-cash", {}).then((v) => ({ ...normLive(v), booked: Number(obj(v).booked) || 0 })),
+
+  // --- trading mode (paper / demo / prod) ---
+  mode: (o?: ReqOpts): Promise<ModeResponse> => request("GET", "/mode", undefined, o?.signal).then(normMode),
+  switchMode: (mode: TradingMode, confirm?: string): Promise<ModeResponse> =>
+    request("POST", "/mode", confirm === undefined ? { mode } : { mode, confirm }).then(normMode),
 
   // --- Kalshi API keys (write-only: the private key is never returned) ---
   credentials: (o?: ReqOpts): Promise<CredentialsResponse> =>

@@ -569,14 +569,19 @@ class LiveBroker(PaperBroker):
 
     async def sync_cash_to_exchange(self) -> Decimal:
         """Book the difference between the exchange balance and the ledger's cash as a
-        deposit/withdrawal (cash and starting balance move together). Refused while orders are open."""
+        deposit/withdrawal: the starting balance moves with it, so P&L is unchanged. A deposit
+        goes to tradeable cash. A withdrawal (taking profits on kalshi.com) comes out of
+        ``reserved_profit`` first, then cash, so the bot keeps trading the same stake.
+        Refused while orders are open."""
         if self._open:
             raise ValueError("cancel or wait for open orders before syncing cash")
         balance = await self.trader.balance_dollars()
         async with self._lock:
             with self._atomic():
                 delta = balance - (self.cash + self.reserved_profit)
-                self.cash += delta
+                from_reserve = min(self.reserved_profit, -delta) if delta < 0 else ZERO
+                self.reserved_profit -= from_reserve
+                self.cash += delta + from_reserve
                 self.starting_balance += delta
                 if self.store is not None:
                     with self.store.transaction():

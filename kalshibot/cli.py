@@ -135,6 +135,8 @@ def _settings(args: argparse.Namespace, *, create: bool = False) -> Settings:
     storage = getattr(args, "storage", None)
     if storage:
         settings.storage.path = storage
+        if not settings.live.enabled:
+            settings.paper_storage_path = storage
     return settings
 
 

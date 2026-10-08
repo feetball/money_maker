@@ -454,13 +454,16 @@ def test_live_settings_switch_storage_and_environment(tmp_path: Any) -> None:
     cfg.write_text("live:\n  enabled: true\n  environment: demo\n  private_key_path: keys/k.pem\n")
     s = load_settings(cfg, env={"KALSHIBOT_LIVE__PRIVATE_KEY_PEM": "", "KALSHIBOT_LIVE__API_KEY_ID": "abc"})
     assert s.live.enabled and s.live.api_key_id == "abc"
-    assert s.storage.path == str((tmp_path / "data" / "kalshibot-live.sqlite3").resolve())
+    assert s.storage.path == str((tmp_path / "data" / "kalshibot-live-demo.sqlite3").resolve())
     assert s.kalshi.base_url == "https://demo-api.kalshi.co/trade-api/v2"
     assert s.live.private_key_path == str((tmp_path / "keys" / "k.pem").resolve())
     # the private key never ends up in a saved config
     s.live.private_key_pem = "SECRET"
     assert "private_key_pem" not in s.model_dump()["live"]
-    paper = load_settings(None, env={})
+    plain = tmp_path / "plain" / "config.yaml"  # never the repo's own config.yaml / data/
+    plain.parent.mkdir()
+    plain.write_text("{}\n")
+    paper = load_settings(plain, env={})
     assert not paper.live.enabled and paper.storage.path.endswith("kalshibot.sqlite3")
 
 
@@ -659,3 +662,144 @@ def asyncio_run(coro: Any) -> Any:
     import asyncio
 
     return asyncio.new_event_loop().run_until_complete(coro)
+
+
+# --------------------------------------------------------------------------- switching paper / demo / prod
+
+
+@pytest.fixture
+def switchable_app(settings: Any, tmp_path: Any, rsa_key: rsa.RSAPrivateKey) -> Any:
+    """Paper mode, a stored demo key, and a factory that builds each mode on fakes."""
+    from conftest import DummyStrategy, FakeKalshiClient
+    from fastapi.testclient import TestClient
+
+    from kalshibot.api import server
+    from kalshibot.feeds import FeedRegistry
+    from kalshibot.live.secrets import CredentialStore
+
+    settings.live.storage_path = str(tmp_path / "live-{environment}.sqlite3")
+    settings.live.secrets_path = str(tmp_path / "secrets" / "keys.json")
+    settings.live.mode_path = str(tmp_path / "trading-mode.json")
+    CredentialStore(settings.live.secrets_path).put("demo", "a1b2c3d4-0000-1111", _pem(rsa_key))
+    traders: list[FakeTrader] = []
+
+    def factory(st: Any) -> Any:
+        trader = None
+        if st.live.enabled:
+            trader = FakeTrader(balance="77")
+            traders.append(trader)
+        return server.build_services(st, client=FakeKalshiClient(), strategies={"dummy": DummyStrategy},
+                                     feeds=FeedRegistry(), trader=trader)
+
+    app = server.create_app(settings, service_factory=factory, autostart=False, frontend_dist=tmp_path / "nd")
+    with TestClient(app, base_url="http://localhost:8765") as client:
+        yield client, app, traders, settings
+
+
+def test_switch_paper_to_demo_and_back(switchable_app: Any) -> None:
+    from kalshibot.config import read_mode_file
+
+    client, app, traders, settings = switchable_app
+    paper_svc = app.state.svc
+    assert client.get("/api/mode").json()["mode"] == "paper"
+    # a strategy switched off on paper must stay off in the new live ledger
+    assert client.patch("/api/strategies/dummy", json={"enabled": False}).status_code == 200
+    client.patch("/api/risk", json={"daily_loss_limit": 42})
+
+    assert client.post("/api/mode", json={"mode": "demo"}).status_code == 403  # dashboard header required
+    r = client.post("/api/mode", json={"mode": "demo"}, headers=H)
+    assert r.status_code == 200, r.text
+    assert r.json()["mode"] == "demo" and r.json()["ready"] is True and r.json()["engine_running"] is False
+    st = client.get("/api/status").json()
+    assert st["mode"] == "live" and st["trading_mode"] == "demo" and st["mode_source"] == "dashboard"
+    assert app.state.svc is not paper_svc and isinstance(app.state.svc.broker, LiveBroker)
+    assert app.state.svc.store.path.endswith("live-demo.sqlite3")
+    assert client.get("/api/account").json()["starting_balance"] == 77  # the Kalshi balance
+    dummy = next(s for s in client.get("/api/strategies").json() if s["name"] == "dummy")
+    assert dummy["enabled"] is False
+    assert client.get("/api/risk").json()["limits"]["daily_loss_limit"] == 42
+    assert read_mode_file(settings.live.mode_path) == "demo"
+
+    # a resting live order blocks leaving live mode
+    from conftest import standard_market
+
+    live = app.state.svc
+    standard_market(live.client, "KXTEST-26SEP27-A")
+    o = asyncio_run_on(client, live.broker.place_order(
+        Intent(ticker="KXTEST-26SEP27-A", side="yes", limit_price=D("0.40"), count=1, tif="gtc")))
+    assert o.status == "open", o.status_reason
+    r = client.post("/api/mode", json={"mode": "paper"}, headers=H)
+    assert r.status_code == 409 and "resting on Kalshi" in r.json()["detail"]
+    asyncio_run_on(client, live.broker.cancel_all())
+    r = client.post("/api/mode", json={"mode": "paper"}, headers=H)
+    assert r.status_code == 200 and r.json()["mode"] == "paper"
+    assert client.get("/api/status").json()["mode"] == "paper"
+    assert app.state.svc.store.path == settings.paper_storage_path
+    assert read_mode_file(settings.live.mode_path) == "paper"
+
+
+def test_switch_to_prod_needs_confirmation_and_a_key(switchable_app: Any) -> None:
+    client, app, _, _ = switchable_app
+    r = client.post("/api/mode", json={"mode": "prod"}, headers=H)
+    assert r.status_code == 422 and "REAL MONEY" in r.json()["detail"]
+    r = client.post("/api/mode", json={"mode": "prod", "confirm": "REAL MONEY"}, headers=H)
+    assert r.status_code == 409 and "no Kalshi prod API key" in r.json()["detail"]
+    assert client.get("/api/mode").json()["mode"] == "paper"  # nothing changed
+
+
+def test_failed_switch_keeps_the_current_mode(switchable_app: Any) -> None:
+    client, app, traders, _ = switchable_app
+    paper_svc = app.state.svc
+    orig = FakeTrader.balance_dollars
+
+    async def refuse(self: FakeTrader) -> Decimal:
+        from kalshibot.kalshi.trading import KalshiAuthError
+
+        raise KalshiAuthError(401, "key revoked", "/portfolio/balance")
+
+    FakeTrader.balance_dollars = refuse  # type: ignore[method-assign]
+    try:
+        r = client.post("/api/mode", json={"mode": "demo"}, headers=H)
+    finally:
+        FakeTrader.balance_dollars = orig  # type: ignore[method-assign]
+    assert r.status_code == 409 and "stayed in paper" in r.json()["detail"]
+    assert app.state.svc is paper_svc and client.get("/api/status").json()["mode"] == "paper"
+
+
+def test_mode_file_wins_and_config_key_stays_with_its_environment(tmp_path: Any) -> None:
+    from kalshibot.api.server import config_has_key
+    from kalshibot.config import load_settings, settings_for_mode, write_mode_file
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("live:\n  enabled: false\n  environment: prod\n  api_key_id: cfgkey-1234\n"
+                   "  private_key_path: k.pem\n")
+    write_mode_file(tmp_path / "data" / "trading-mode.json", "demo")
+    s = load_settings(cfg, env={})
+    assert s.trading_mode == "demo" and s.mode_source == "dashboard"
+    assert s.storage.path.endswith("kalshibot-live-demo.sqlite3")
+    assert s.paper_storage_path.endswith("data/kalshibot.sqlite3")
+    # the config key was set up for prod: never used for demo
+    assert config_has_key(s, "prod") and not config_has_key(s, "demo") and not config_has_key(s)
+    back = settings_for_mode(s, "paper")
+    assert back.storage.path == s.paper_storage_path and not back.live.enabled
+    assert back.kalshi.base_url == "https://api.elections.kalshi.com/trade-api/v2"
+
+
+def asyncio_run_on(client: Any, coro: Any) -> Any:
+    """Run a coroutine on the TestClient's event loop (the app's broker lives there)."""
+    return client.portal.call(lambda: coro)
+
+
+async def test_withdrawal_comes_out_of_reserved_profit_first(broker: LiveBroker, trader: FakeTrader) -> None:
+    # $500 start; $50 of profit was swept aside, $450 is the tradeable stake
+    broker.cash, broker.reserved_profit = D("450"), D("50")
+    trader.balance = D("470")  # took $30 out on kalshi.com
+    assert await broker.sync_cash_to_exchange() == D("-30")
+    assert broker.reserved_profit == D("20") and broker.cash == D("450")
+    assert broker.starting_balance == D("470")  # P&L unchanged: net worth and start both fell $30
+    trader.balance = D("400")  # $70 more: the last $20 of reserve, then $50 of stake
+    await broker.sync_cash_to_exchange()
+    assert broker.reserved_profit == 0 and broker.cash == D("400")
+    trader.balance = D("500")  # a $100 deposit goes to the stake
+    await broker.sync_cash_to_exchange()
+    assert broker.cash == D("500") and broker.reserved_profit == 0

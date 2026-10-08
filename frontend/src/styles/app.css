@@ -1908,3 +1908,70 @@ dl.kv-grid dd {
 .api-key-form > .btn {
   justify-self: start;
 }
+
+/* ---------------------------------------------------------------- trading mode */
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.mode-option {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mode-option:hover:not(:disabled) {
+  border-color: var(--text-2);
+}
+.mode-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.mode-option.on {
+  border-width: 2px;
+  padding: 11px 13px;
+  border-color: var(--text);
+  cursor: default;
+}
+.mode-option.mode-prod.on {
+  border-color: var(--bad-text);
+  background: var(--bad-bg);
+}
+.mode-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.mode-title .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--bad-text);
+}
+.mode-current {
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mode-body {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.mode-note {
+  color: var(--warn-text, var(--text-2));
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}

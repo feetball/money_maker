@@ -34,7 +34,7 @@ def test_defaults_without_file(tmp_path, monkeypatch):
     assert s.storage.path == "data/kalshibot.sqlite3"
 
 
-def test_example_file_matches_defaults():
+def test_example_file_matches_defaults(tmp_path):
     raw = yaml.safe_load(EXAMPLE.read_text())
     assert set(raw) == {"kalshi", "account", "engine", "paper", "risk", "strategies", "analytics", "server",
                         "storage", "live"}
@@ -43,10 +43,12 @@ def test_example_file_matches_defaults():
     # tests/test_integration_defaults.py) with every parameter left at the code's default
     names = ["btc15m_favorite", "ladder_favorite", "maker_favorite", "no_basket_arb"]
     assert raw["strategies"] == {n: {"enabled": True, "params": {}} for n in names}
-    s = load_settings(EXAMPLE, env={})
+    # never read the developer's real data/trading-mode.json (the dashboard's mode choice)
+    s = load_settings(EXAMPLE, env={"KALSHIBOT_LIVE__MODE_PATH": str(tmp_path / "no-such-mode.json")})
     assert s.config_path == EXAMPLE
     defaults = Settings()
-    exclude: Any = {"config_path": True, "storage": True, "strategies": True, "live": {"secrets_path"}}
+    exclude: Any = {"config_path": True, "storage": True, "strategies": True, "live": {"secrets_path", "mode_path"},
+                    "paper_storage_path": True, "paper_base_url": True}
     assert s.model_dump(exclude=exclude) == defaults.model_dump(exclude=exclude)
     # the relative default storage path is resolved against the config file's directory
     assert Path(s.storage.path) == (EXAMPLE.parent / defaults.storage.path).resolve()

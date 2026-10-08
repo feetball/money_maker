@@ -41,6 +41,7 @@ import type {
   SignalDecision,
   StatusResponse,
   LiveStatus,
+  ModeResponse,
   CredentialsResponse,
   StoredKeyInfo,
   Strategy,
@@ -200,6 +201,21 @@ function list<T>(v: unknown, f: (r: Raw) => T): T[] {
 }
 
 // ---------------------------------------------------------------------------
+
+export function normMode(v: unknown): ModeResponse {
+  const o = obj(v);
+  const k = obj(o.keys);
+  const m = o.mode === "demo" || o.mode === "prod" ? o.mode : "paper";
+  return {
+    mode: m,
+    source: o.source === "dashboard" ? "dashboard" : "config",
+    keys: { demo: bool(k.demo), prod: bool(k.prod) },
+    engine_running: bool(o.engine_running),
+    open_live_orders: num(o.open_live_orders),
+    ready: o.ready === undefined ? true : bool(o.ready),
+    blocked_reason: strOrNull(o.blocked_reason),
+  };
+}
 
 function normKeySource(v: unknown): StoredKeyInfo["source"] {
   return v === "config" || v === "dashboard" ? v : null;

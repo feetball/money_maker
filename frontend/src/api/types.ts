@@ -86,6 +86,21 @@ export interface LiveExchange {
 
 export type KalshiEnv = "demo" | "prod";
 
+/** paper = simulated; demo = real orders on Kalshi's demo exchange; prod = real money. */
+export type TradingMode = "paper" | KalshiEnv;
+
+export interface ModeResponse {
+  mode: TradingMode;
+  /** "dashboard" = chosen here (saved); "config" = from config.yaml / env. */
+  source: "config" | "dashboard";
+  /** Whether a Kalshi API key exists for each environment. */
+  keys: Record<KalshiEnv, boolean>;
+  engine_running: boolean;
+  open_live_orders: number;
+  ready: boolean;
+  blocked_reason: string | null;
+}
+
 /** What the dashboard may know about a stored key (never the key itself). */
 export interface StoredKeyInfo {
   /** "config" = config.yaml / env vars (cannot be changed here), "dashboard", or null = none. */

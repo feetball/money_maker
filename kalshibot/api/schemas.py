@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "LiveCredentialsIn",
+    "ModeSwitchRequest",
     "Account",
     "AccountPatch",
     "AccountResetRequest",
@@ -75,6 +76,12 @@ class StatusResponse(_Out):
     engine: EngineStatus
     exchange: ExchangeStatus
     server_time: str
+
+
+class ModeSwitchRequest(_In):
+    mode: Literal["paper", "demo", "prod"]
+    #: must be "REAL MONEY" to switch to prod
+    confirm: str | None = Field(None, max_length=32)
 
 
 class LiveCredentialsIn(_In):

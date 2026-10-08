@@ -19,10 +19,12 @@ Unknown keys are kept (``extra="allow"``) and logged, so other modules can add s
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -53,6 +55,9 @@ __all__ = [
     "StrategySettings",
     "apply_env_overrides",
     "apply_live_mode",
+    "read_mode_file",
+    "settings_for_mode",
+    "write_mode_file",
     "ensure_config_file",
     "load_settings",
     "resolve_storage_path",
@@ -223,8 +228,12 @@ class LiveSettings(_Section):
     #: API keys entered in the dashboard (owner-only file; see kalshibot/live/secrets.py). Keys in
     #: ``api_key_id``/``private_key_*`` above win over it.
     secrets_path: str = "data/secrets/kalshi-keys.json"
-    #: the live ledger has its own database (paper history stays in ``storage.path``)
-    storage_path: str = "data/kalshibot-live.sqlite3"
+    #: the live ledger has its own database per environment (``{environment}`` = demo/prod), so
+    #: paper, demo and real-money history never mix
+    storage_path: str = "data/kalshibot-live-{environment}.sqlite3"
+    #: the trading mode chosen in the dashboard (Settings -> Trading mode); when this file exists
+    #: it wins over ``enabled``/``environment`` above
+    mode_path: str = "data/trading-mode.json"
     #: hard caps per order, checked after the risk manager; larger orders are rejected
     max_order_contracts: int = Field(100, ge=1)
     max_order_cost: NonNegMoney = D(100)
@@ -257,6 +266,20 @@ class Settings(_Section):
 
     #: File the settings were loaded from (None = defaults only). Not part of the YAML.
     config_path: Path | None = Field(default=None, exclude=True)
+    #: paper-mode database and API URL as configured (live mode replaces ``storage.path`` and
+    #: ``kalshi.base_url``; switching back to paper needs the originals). Not part of the YAML.
+    paper_storage_path: str | None = Field(default=None, exclude=True)
+    paper_base_url: str | None = Field(default=None, exclude=True)
+    #: where the trading mode came from: "config" (config.yaml/env) or "dashboard" (mode file)
+    mode_source: str = Field(default="config", exclude=True)
+    #: ``live.environment`` as configured, before a dashboard mode switch; a key set in the
+    #: config/env belongs to this environment only. None = same as ``live.environment``.
+    config_environment: str | None = Field(default=None, exclude=True)
+
+    @property
+    def trading_mode(self) -> str:
+        """``paper``, ``demo`` (live on Kalshi's demo exchange) or ``prod`` (real money)."""
+        return self.live.environment if self.live.enabled else "paper"
 
     def strategy(self, name: str) -> StrategySettings:
         """Settings for strategy ``name`` (defaults if not configured)."""
@@ -335,6 +358,16 @@ def load_settings(
     if cfg_path is not None:
         settings.storage.path = resolve_storage_path(settings.storage.path, cfg_path)
         settings.live.secrets_path = resolve_storage_path(settings.live.secrets_path, cfg_path)
+        settings.live.mode_path = resolve_storage_path(settings.live.mode_path, cfg_path)
+    settings.paper_storage_path = settings.storage.path
+    settings.paper_base_url = settings.kalshi.base_url
+    settings.config_environment = settings.live.environment
+    chosen = read_mode_file(settings.live.mode_path)
+    if chosen is not None:
+        settings.live.enabled = chosen != "paper"
+        if chosen != "paper":
+            settings.live.environment = chosen  # type: ignore[assignment]
+        settings.mode_source = "dashboard"
     if settings.live.enabled:
         apply_live_mode(settings, cfg_path)
     _warn_unknown(settings)
@@ -346,11 +379,60 @@ def apply_live_mode(settings: Settings, config_path: str | os.PathLike[str] | No
     live environment's API (demo markets differ from production ones)."""
     from kalshibot.kalshi.trading import base_url_for
 
-    settings.storage.path = resolve_storage_path(settings.live.storage_path, config_path)
+    env = settings.live.environment
+    settings.storage.path = resolve_storage_path(settings.live.storage_path.replace("{environment}", env), config_path)
     settings.kalshi.base_url = base_url_for(settings.live.environment)
     if settings.live.private_key_path and config_path is not None and not settings.live.private_key_pem:
         settings.live.private_key_path = resolve_storage_path(settings.live.private_key_path, config_path)
     return settings
+
+
+TRADING_MODES = ("paper", "demo", "prod")
+
+
+def read_mode_file(path: str | os.PathLike[str] | None) -> str | None:
+    """The trading mode saved by the dashboard, or None (no file / unreadable / unknown mode)."""
+    if not path:
+        return None
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        mode = json.loads(p.read_text()).get("mode")
+    except (OSError, ValueError, AttributeError):
+        log.error("config: cannot read the trading mode file %s; using config.yaml", p)
+        return None
+    if mode not in TRADING_MODES:
+        log.error("config: unknown trading mode %r in %s; using config.yaml", mode, p)
+        return None
+    return str(mode)
+
+
+def write_mode_file(path: str | os.PathLike[str], mode: str) -> None:
+    """Persist the dashboard's trading mode (atomic replace)."""
+    if mode not in TRADING_MODES:
+        raise ValueError(f"unknown trading mode {mode!r}")
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps({"mode": mode, "changed_at": datetime.now(UTC).isoformat(timespec="seconds")}))
+    os.replace(tmp, p)
+
+
+def settings_for_mode(settings: Settings, mode: str) -> Settings:
+    """A copy of ``settings`` for another trading mode (database, API URL and live flags)."""
+    if mode not in TRADING_MODES:
+        raise ValueError(f"unknown trading mode {mode!r}")
+    s = settings.model_copy(deep=True)
+    if mode == "paper":
+        s.live.enabled = False
+        s.storage.path = settings.paper_storage_path or settings.storage.path
+        s.kalshi.base_url = settings.paper_base_url or settings.kalshi.base_url
+    else:
+        s.live.enabled = True
+        s.live.environment = mode  # type: ignore[assignment]
+        apply_live_mode(s, settings.config_path)
+    return s
 
 
 def resolve_storage_path(path: str, config_path: str | os.PathLike[str] | None) -> str:

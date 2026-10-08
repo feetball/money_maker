@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { api, API_BASE, IS_MOCK } from "../api/client";
-import type { CredentialsResponse, ExposureRow, KalshiEnv, RiskLimits, RiskResponse, StoredKeyInfo } from "../api/types";
+import type {
+  CredentialsResponse,
+  ExposureRow,
+  KalshiEnv,
+  ModeResponse,
+  RiskLimits,
+  RiskResponse,
+  StoredKeyInfo,
+  TradingMode,
+} from "../api/types";
 import { useConfirm } from "../components/ConfirmDialog";
 import { DataTable } from "../components/DataTable";
 import { Icon } from "../components/Icon";
@@ -508,6 +517,102 @@ function ProfitSweep() {
   );
 }
 
+const MODE_INFO: Record<TradingMode, { title: string; body: string }> = {
+  paper: { title: "Paper", body: "Simulated fills against live Kalshi books. No orders, no money." },
+  demo: { title: "Demo", body: "Real orders on Kalshi's demo exchange with fake money. Needs a demo key." },
+  prod: { title: "Real money", body: "Real orders on Kalshi with your money. Needs a production key." },
+};
+
+function TradingModeSwitch() {
+  const poll = usePolling((signal) => api.mode({ signal }), { intervalMs: 10_000, label: "trading mode" });
+  const confirm = useConfirm();
+  const { busy, run } = useAction();
+
+  const choose = async (m: ModeResponse, target: TradingMode) => {
+    if (target === m.mode || busy !== null) return;
+    const leavingLive = m.mode !== "paper";
+    const ok = await confirm({
+      title: target === "prod" ? "Switch to REAL MONEY trading?" : `Switch to ${MODE_INFO[target].title.toLowerCase()} trading?`,
+      danger: target === "prod",
+      requireText: target === "prod" ? "REAL MONEY" : undefined,
+      confirmLabel: `Switch to ${MODE_INFO[target].title}`,
+      body: (
+        <>
+          <p>
+            The engine <strong>stops</strong>{m.engine_running ? " (it is running now)" : ""}. The {MODE_INFO[target].title.toLowerCase()} ledger takes over:
+            positions, history and analytics are kept separately for each mode and come back when you switch back.
+          </p>
+          {target !== "paper" && (
+            <p>
+              A new {target} ledger starts at your Kalshi balance and copies this mode's strategy switches and risk limits. Check the Strategies page and
+              the risk limits, then press Start.
+            </p>
+          )}
+          {leavingLive && <p>Open {m.mode} positions stay on Kalshi and settle there; their P&amp;L is booked when you switch back.</p>}
+          {target === "prod" && (
+            <p>
+              <strong>Orders will spend real money.</strong> Type REAL MONEY to confirm.
+            </p>
+          )}
+        </>
+      ),
+    });
+    if (!ok) return;
+    const r = await run("mode", () => api.switchMode(target, target === "prod" ? "REAL MONEY" : undefined), {
+      error: `Couldn't switch to ${MODE_INFO[target].title}`,
+    });
+    // every page, stream and cached number belongs to the old ledger: start the app over
+    if (r) window.location.reload();
+  };
+
+  return (
+    <PollView<ModeResponse> poll={poll} loadingLabel="Loading mode…">
+      {(m) => (
+        <div>
+          <div className="mode-options" role="radiogroup" aria-label="Trading mode">
+            {(["paper", "demo", "prod"] as const).map((opt) => {
+              const needsKey = opt !== "paper" && !m.keys[opt];
+              const blockedByOrders = m.mode !== "paper" && opt !== m.mode && m.open_live_orders > 0;
+              const on = opt === m.mode;
+              const disabled = !on && (needsKey || blockedByOrders || busy !== null);
+              return (
+                <button
+                  key={opt}
+                  role="radio"
+                  aria-checked={on}
+                  className={`mode-option mode-${opt}${on ? " on" : ""}`}
+                  disabled={disabled}
+                  aria-busy={busy === "mode"}
+                  onClick={() => void choose(m, opt)}
+                >
+                  <span className="mode-title">
+                    {opt === "prod" && <Icon name="alert" />}
+                    {MODE_INFO[opt].title}
+                    {on && <span className="mode-current">current</span>}
+                  </span>
+                  <span className="mode-body">{MODE_INFO[opt].body}</span>
+                  {!on && needsKey && <span className="mode-note">Add a {opt} key below first</span>}
+                  {on && opt !== "paper" && !m.ready && <span className="mode-note">Locked: {m.blocked_reason}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <p className="muted small">
+            {m.open_live_orders > 0 && (
+              <>
+                {m.open_live_orders} order(s) are resting on Kalshi: cancel them (Positions &amp; Orders) before leaving {m.mode} mode.{" "}
+              </>
+            )}
+            {m.source === "dashboard"
+              ? "Chosen here; it is remembered across restarts and wins over live.enabled in config.yaml."
+              : "Set by config.yaml (live.enabled / live.environment). Choosing here overrides it."}
+          </p>
+        </div>
+      )}
+    </PollView>
+  );
+}
+
 const ENV_LABEL: Record<KalshiEnv, string> = { demo: "Demo (fake money)", prod: "Production (real money)" };
 
 function KeyRow({ env, info, onRemove, busy }: { env: KalshiEnv; info: StoredKeyInfo; onRemove: () => void; busy: boolean }) {
@@ -689,9 +794,7 @@ function ApiKeys() {
                   </>
                 )
               ) : (
-                <span className="muted">
-                  Off. Keys can be added and verified now; set <span className="mono">live.enabled: true</span> in config.yaml and restart to trade.
-                </span>
+                <span className="muted">Off (paper). Keys can be added and verified now; switch the trading mode above to use them.</span>
               )}
             </dd>
           </dl>
@@ -733,8 +836,9 @@ function LiveTrading() {
       confirmLabel: "Sync cash",
       body: (
         <p>
-          The ledger's cash is set to the Kalshi balance ({fmtUsd(x.balance ?? undefined)}). The difference ({fmtPnl(x.cash_drift ?? 0)}) is treated as a deposit
-          or withdrawal, so the starting balance moves with it and P&amp;L is unchanged. Use this after you move money in or out of Kalshi.
+          The difference between the Kalshi balance ({fmtUsd(x.balance ?? undefined)}) and the bot's books ({fmtPnl(x.cash_drift ?? 0)}) is booked as a
+          deposit or withdrawal, so P&amp;L is unchanged. A withdrawal comes out of the reserved (swept) profit first, then the trading cash. Use this
+          after you move money in or out of Kalshi.
         </p>
       ),
     });
@@ -831,8 +935,6 @@ export function Settings() {
     if (seenKill.current !== undefined && kill !== undefined && kill !== seenKill.current) refresh();
     seenKill.current = kill;
   }, [kill, refresh]);
-  // when live trading waits for a key, that is the first thing to do here
-  const liveLocked = status?.live != null && !status.live.ready;
   const keysCard = (
     <Card title="Kalshi API keys" subtitle="Needed for live trading. Write-only: a saved key is never shown again">
       <ApiKeys />
@@ -841,7 +943,10 @@ export function Settings() {
   return (
     <div className="page">
       <PageHeader title="Settings" subtitle={`Risk limits are enforced on every order intent before it reaches the ${status?.mode === "live" ? "live Kalshi" : "paper"} broker.`} actions={<Freshness poll={poll} />} />
-      {liveLocked && keysCard}
+      <Card title="Trading mode" subtitle="Paper, Kalshi demo, or real money. Switching stops the engine">
+        <TradingModeSwitch />
+      </Card>
+      {keysCard}
       <Card title="Risk limits" subtitle="Changes apply to the next intent the engine evaluates">
         <PollView<RiskResponse> poll={poll} loadingLabel="Loading risk limits…">
           {(r) => <RiskLimitsForm risk={r} onSaved={(n) => poll.mutate(() => n)} />}
@@ -850,7 +955,6 @@ export function Settings() {
       <Card title="Current utilization">
         <PollView<RiskResponse> poll={poll}>{(r) => <Utilization risk={r} />}</PollView>
       </Card>
-      {!liveLocked && keysCard}
       {status?.mode === "live" && (
         <Card title="Live trading" subtitle="The bot's ledger compared with your Kalshi account (checked every snapshot)">
           <LiveTrading />
