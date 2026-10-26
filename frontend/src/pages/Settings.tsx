@@ -469,7 +469,7 @@ function ProfitSweep() {
         <Switch checked={enabled} onChange={toggle} label="Sweep profit out of cash" showLabel disabled={busy !== null} />
       </div>
       <div className="form-row">
-        <Field label="Sweep %" htmlFor="sweep-pct" hint="% of each winning trade's profit moved to reserved profit." error={pct && pctInvalid ? "Enter 0-100" : null}>
+        <Field label="Sweep %" htmlFor="sweep-pct" hint="% of net profit moved to reserved profit once realized P&L passes its previous high." error={pct && pctInvalid ? "Enter 0-100" : null}>
           <input
             id="sweep-pct"
             className="input num-input"
@@ -960,7 +960,7 @@ export function Settings() {
           <LiveTrading />
         </Card>
       )}
-      <Card title="Profit sweep" subtitle="Keep winning trades' profit out of the tradeable pool, or bring some back in">
+      <Card title="Profit sweep" subtitle="Keep net profit out of the tradeable pool, or bring some back in">
         <ProfitSweep />
       </Card>
       <div className="grid grid-2">

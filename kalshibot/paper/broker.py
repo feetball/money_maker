@@ -415,7 +415,8 @@ class PaperBroker:
         self.log_to_store = log_to_store
         default_start = starting_balance if starting_balance is not None else getattr(
             account, "starting_balance", 1000)
-        #: fraction of each trade's realized profit moved to ``reserved_profit`` instead of ``cash``
+        #: fraction of net realized profit (above the ``_sweep_hwm`` high-water mark) moved to
+        #: ``reserved_profit`` instead of ``cash``
         #: (defaults below are only used until an account row exists; after that the stored value wins,
         #: same as ``starting_balance``/``cash`` - see ``_load``)
         self._default_sweep_pct = D(profit_sweep_pct if profit_sweep_pct is not None
@@ -437,6 +438,8 @@ class PaperBroker:
         self.fees_paid = ZERO
         #: profit swept out of cash (never spent on new orders); see ``_sweep_profit``
         self.reserved_profit = ZERO
+        #: highest ``realized_pnl`` already considered by the sweep (never below 0)
+        self._sweep_hwm = ZERO
         self.profit_sweep_enabled = self._default_sweep_enabled
         self.profit_sweep_pct = self._default_sweep_pct
         self._open: dict[int, Order] = {}
@@ -476,6 +479,9 @@ class PaperBroker:
         self.profit_sweep_pct = acct.get("profit_sweep_pct", self.profit_sweep_pct)
         self._peak_equity = acct["peak_equity"]
         self._max_dd_pct = acct["max_drawdown_pct"]
+        hwm = st.get_kv("broker.sweep_hwm")
+        # accounts from before the high-water mark: start it at the current realized P&L (or 0 when down)
+        self._sweep_hwm = D(hwm) if hwm is not None else max(self.realized_pnl, ZERO)
         self._open = {o.id: o for o in st.open_orders()}
         self._positions = {p.key: p for p in st.list_positions(open_only=True)}
         for row in st.get_kv("broker.consumed", []) or []:
@@ -499,6 +505,8 @@ class PaperBroker:
         self._ids = {"order": st.max_id("orders") + 1, "fill": st.max_id("fills") + 1,
                      "settlement": st.max_id("settlements") + 1}
         self._persisted = self._state_values()
+        if hwm is None:
+            self._persisted.pop("broker.sweep_hwm")  # derived above, not stored yet: write it next commit
 
     def _state_values(self) -> dict[str, Any]:
         """The broker's working state as stored (``account`` row + ``broker.*`` kv)."""
@@ -510,6 +518,7 @@ class PaperBroker:
                                 for (t, s, p), e in sorted(self._consumed.items())],
             "broker.cursors": {t: [iso(ts), sorted(ids)] for t, (ts, ids) in sorted(self._cursors.items())},
             "broker.marks": {t: m.to_state() for t, m in sorted(self._marks.items()) if t in held},
+            "broker.sweep_hwm": str(self._sweep_hwm),
         }
         if self._day_start is not None:
             out["broker.day_start"] = [self._day_start[0], str(self._day_start[1])]
@@ -541,13 +550,23 @@ class PaperBroker:
         self._ids[kind] = i + 1
         return i
 
-    def _sweep_profit(self, pnl: Decimal) -> None:
-        """Move a fraction of a closed/settled trade's profit out of ``cash`` into
-        ``reserved_profit`` (``AccountSettings.profit_sweep_pct``/``profit_sweep_enabled``), so it
-        is never put back in the tradeable pool. Losses are left alone - only realized gains are swept."""
-        if not self.profit_sweep_enabled or pnl <= 0 or self.profit_sweep_pct <= 0:
+    def _sweep_profit(self) -> None:
+        """Move a fraction of new net profit out of ``cash`` into ``reserved_profit``
+        (``AccountSettings.profit_sweep_pct``/``profit_sweep_enabled``), so it is never put back in
+        the tradeable pool. Call after each change to ``realized_pnl``.
+
+        Only ``realized_pnl`` above its high-water mark ``_sweep_hwm`` (starts at 0) is swept: wins
+        first make up for earlier losses, and nothing is swept while the account is down. Sweeping
+        each winning trade instead let losses drain cash while every win was set aside, so tradeable
+        cash could only fall. The mark advances while the sweep is off too, so turning it on never
+        sweeps profit made before."""
+        gain = self.realized_pnl - self._sweep_hwm
+        if gain <= 0:
             return
-        amount = floor_to(pnl * self.profit_sweep_pct / 100, self.precision)
+        self._sweep_hwm = self.realized_pnl
+        if not self.profit_sweep_enabled or self.profit_sweep_pct <= 0:
+            return
+        amount = floor_to(gain * self.profit_sweep_pct / 100, self.precision)
         amount = min(amount, self.cash)
         if amount <= 0:
             return
@@ -562,7 +581,7 @@ class PaperBroker:
 
     def _snapshot(self) -> tuple[Any, ...]:
         return (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
-                self.profit_sweep_enabled, self.profit_sweep_pct,
+                self.profit_sweep_enabled, self.profit_sweep_pct, self._sweep_hwm,
                 {k: _copy_order(o) for k, o in self._open.items()},
                 {k: dataclasses.replace(p) for k, p in self._positions.items()},
                 {k: dataclasses.replace(e) for k, e in self._consumed.items()},
@@ -572,7 +591,7 @@ class PaperBroker:
 
     def _restore(self, snap: tuple[Any, ...]) -> None:
         (self.starting_balance, self.cash, self.realized_pnl, self.fees_paid, self.reserved_profit,
-         self.profit_sweep_enabled, self.profit_sweep_pct, self._open,
+         self.profit_sweep_enabled, self.profit_sweep_pct, self._sweep_hwm, self._open,
          self._positions, self._consumed, self._cursors, self._marks, self._day_start, self._peak_equity,
          self._max_dd_pct, self._settled, self._wins, self._stats, self._persisted) = snap
 
@@ -1267,7 +1286,7 @@ class PaperBroker:
             pos.fv_weight *= float(frac_left)
             pos.realized_pnl += pnl
             self.realized_pnl += pnl
-            self._sweep_profit(pnl)
+            self._sweep_profit()
             self._settled += 1
             self._wins += pnl > 0
             redemption = ONE * m
@@ -1887,7 +1906,7 @@ class PaperBroker:
                            opened_at=p.opened_at)
             self.cash += payout
             self.realized_pnl += pnl
-            self._sweep_profit(pnl)
+            self._sweep_profit()
             self._settled += 1
             self._wins += pnl > 0
             p.realized_pnl += pnl
@@ -2006,7 +2025,7 @@ class PaperBroker:
         return PortfolioView(
             ts=a.ts, starting_balance=a.starting_balance, cash=a.cash, reserved_cash=a.reserved_cash,
             equity=a.equity, equity_mid=a.equity_mid, realized_pnl=a.realized_pnl, unrealized_pnl=a.unrealized_pnl,
-            fees_paid=a.fees_paid, day_start_equity=a.day_start_equity,
+            fees_paid=a.fees_paid, day_start_equity=a.day_start_equity, reserved_profit=a.reserved_profit,
             positions=tuple(dataclasses.replace(p) for p in self.positions()),
             open_orders=tuple(_copy_order(o) for o in self.open_orders()),
             strategy_daily_pnl=dict(self._last_strategy_daily),  # computed by account() just now

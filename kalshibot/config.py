@@ -109,9 +109,10 @@ class KalshiSettings(_Section):
 
 class AccountSettings(_Section):
     starting_balance: NonNegMoney = D(1000)
-    #: % of each closed/settled trade's profit moved out of ``cash`` into ``reserved_profit`` (never
-    #: spent on new orders, not part of sizing/risk equity); 100 = keep all profit separate, 0 = old
-    #: behaviour (profit stays in the tradeable pool). Losses are never swept. Live-adjustable via
+    #: % of net realized profit moved out of ``cash`` into ``reserved_profit`` (never spent on new
+    #: orders, not part of sizing/risk equity) each time cumulative realized P&L reaches a new high;
+    #: wins first make up earlier losses, so nothing is swept while the account is down. 100 = keep
+    #: all profit separate, 0 = old behaviour (profit stays in the tradeable pool). Live-adjustable via
     #: ``PATCH /api/account``; once an account exists the stored value wins over this default.
     profit_sweep_pct: float = Field(100, ge=0, le=100)
     #: on/off switch for the sweep, independent of ``profit_sweep_pct`` (so turning it off keeps the

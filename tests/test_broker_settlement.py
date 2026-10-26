@@ -198,6 +198,80 @@ async def test_withdraw_reserved_profit_moves_money_back_to_cash(md, clock):
         await b.withdraw_reserved_profit(pct=101)
 
 
+def add_market(md, ticker):
+    md.set_market(make_market(ticker))
+    md.set_book(ticker, yes_bids=[("0.38", 100)], no_bids=[("0.60", 100)])
+
+
+async def settle_trade(b, md, ticker, result, count=10):
+    await b.place_order(buy(ticker, "yes", "0.40", count))  # 10 contracts: cost 4.00, fee .17
+    finalize(md, ticker, result, "1.0000" if result == "yes" else "0.0000")
+    [s] = await b.check_settlements()
+    return s
+
+
+async def test_profit_sweep_makes_up_losses_before_sweeping(md, clock):
+    """Only net profit is swept (realized P&L above its high-water mark, which starts at 0). Sweeping
+    every winning trade let losses drain cash while each win was set aside, so cash could only fall."""
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    add_market(md, "KXTEST-26SEP-C")
+    await settle_trade(b, md, A, "no")  # -4.17
+    await settle_trade(b, md, B, "yes", count=5)  # a smaller win: still down, nothing swept
+    assert b.realized_pnl < 0
+    assert b.reserved_profit == ZERO and b.cash == D("1000") + b.realized_pnl
+    await settle_trade(b, md, "KXTEST-26SEP-C", "yes")  # back above 0: only the net profit is swept
+    assert b.realized_pnl > 0
+    assert b.reserved_profit == b.realized_pnl and b.cash == D("1000")
+
+
+async def test_profit_sweep_after_a_loss_waits_for_a_new_high(md, clock):
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    add_market(md, "KXTEST-26SEP-C")
+    await settle_trade(b, md, A, "yes")  # +5.83, all swept
+    await settle_trade(b, md, B, "no")  # -4.17 from cash
+    assert b.reserved_profit == D("5.83") and b.cash == D("1000") - D("4.17")
+    await settle_trade(b, md, "KXTEST-26SEP-C", "yes")  # +5.83: 4.17 refills cash, 1.66 is a new high
+    assert b.reserved_profit == D("5.83") + D("1.66") and b.cash == D("1000")  # the stake is kept
+
+
+async def test_profit_sweep_turned_on_later_skips_earlier_profit(md, clock):
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    await b.set_profit_sweep(enabled=False)
+    await settle_trade(b, md, A, "yes")
+    await b.set_profit_sweep(enabled=True)
+    await settle_trade(b, md, B, "yes")
+    assert b.reserved_profit == D("5.83") and b.cash == D("1000") + D("5.83")
+
+
+async def test_profit_sweep_high_water_mark_persists(tmp_path, md, clock):
+    path = tmp_path / "hwm.sqlite3"
+    st = Store(path)
+    b1 = PaperBroker(md, st, starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    await settle_trade(b1, md, A, "yes")  # high-water mark 5.83
+    await settle_trade(b1, md, B, "no")  # realized 1.66
+    st.close()
+    st = Store(path)
+    assert PaperBroker(md, st, starting_balance=1000, clock=clock)._sweep_hwm == D("5.83")
+    # accounts stored before the mark existed start it at realized P&L (0 when down), written next commit
+    st.delete_kv("broker.sweep_hwm")
+    b3 = PaperBroker(md, st, starting_balance=1000, clock=clock)
+    assert b3._sweep_hwm == D("1.66")
+    add_market(md, "KXTEST-26SEP-C")
+    await settle_trade(b3, md, "KXTEST-26SEP-C", "no")
+    assert D(st.get_kv("broker.sweep_hwm")) == D("1.66")
+
+
+async def test_portfolio_daily_pnl_counts_reserved_profit(md, clock):
+    """Risk's daily P&L (``PortfolioView.daily_pnl``) matches ``todays_pnl``: the day starts at net
+    worth, so profit already swept out of ``equity`` is not a loss for the daily kill switch."""
+    b = PaperBroker(md, Store(":memory:"), starting_balance=1000, profit_sweep_pct=100, clock=clock)
+    b.account()  # the day starts at 1000
+    await settle_trade(b, md, A, "yes")
+    assert b.portfolio().daily_pnl == b.account().todays_pnl == D("5.83")
+    clock.advance(86400)
+    assert b.portfolio().daily_pnl == b.account().todays_pnl == ZERO  # was -5.83 (-reserved_profit)
+
+
 async def test_determined_marks_but_waits_for_finalized(broker, md):
     await broker.place_order(buy(A, "yes", "0.40", 10))
     finalize(md, A, "yes", "1.0000", status="determined")

@@ -33,8 +33,11 @@ New tests: `tests/test_paper_run_fixes.py` and the "paper-run fixes" block at th
 - **Backtest CIs changed meaning.** The Backtests page now day-clusters too (P&L and trades are
   unchanged), so the event-clustered CIs quoted in the strategy docstrings and FINDINGS.md no
   longer reproduce there. Day-clustered research CIs come from `research/paper_run/data_review.py`.
-- **The profit sweep shrinks every equity-sized strategy**, not just btc15m: with the default 100%
-  sweep, equity can only fall, so percentage caps tighten forever. Worth a look for live use.
+- **The profit sweep** used to sweep every winning trade while losses stayed in cash, so tradeable
+  equity could only fall (the live prod account stalled at `min_cash_reserve` on 2026-10-26 with
+  $24 "reserved" while down $28). It now sweeps only realized P&L above its high-water mark, so
+  losses are made up before anything is set aside. At 100% tradeable equity still never grows past
+  the stake. Already-reserved money stays reserved until withdrawn.
 - **Dashboard overrides beat config.yaml** (`strategy_state` rows survive `reset`). A startup
   warning when a stored override differs from the config would make that visible.
 - **Fill rule.** The research filled at the next minute's ask regardless of price, while live

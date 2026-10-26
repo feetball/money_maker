@@ -14,7 +14,7 @@ kalshi:
 
 account:
   starting_balance: 1000  # paper cash at start / after reset
-  profit_sweep_pct: 100   # % of each trade's profit set aside as reserved_profit instead of staying tradeable
+  profit_sweep_pct: 100   # % of net profit (realized P&L above its high-water mark) set aside as reserved_profit
 
 engine:
   autostart: true        # start the trading loop with `kalshibot serve`

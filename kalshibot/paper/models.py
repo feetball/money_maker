@@ -481,10 +481,16 @@ class PortfolioView:
     #: each strategy's P&L since the UTC day started (realized + change in unrealized); used by
     #: the per-strategy daily loss limit (``RiskManager``). Empty when unknown.
     strategy_daily_pnl: Mapping[str, Decimal] = field(default_factory=dict)
+    #: profit swept out of ``cash``/``equity`` (``AccountState.reserved_profit``)
+    reserved_profit: Decimal = ZERO
 
     @property
     def daily_pnl(self) -> Decimal:
-        return self.equity - self.day_start_equity if self.day_start_equity is not None else ZERO
+        # day_start_equity is net worth (reserved profit included, ``AccountState.todays_pnl``),
+        # so a sweep moving profit out of ``equity`` is not a loss
+        if self.day_start_equity is None:
+            return ZERO
+        return self.equity + self.reserved_profit - self.day_start_equity
 
     def position(self, ticker: str, strategy: str | None = None) -> Position | None:
         """Open position in ``ticker`` (of ``strategy`` if given; else the first found)."""
