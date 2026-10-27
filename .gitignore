@@ -16,6 +16,7 @@ frontend/dist/
 .env
 
 # research: generated/cached data, logs, and scratch output (keep source .py/.md)
+research/*
 research/**/raw/
 research/**/cache/
 research/**/results/
@@ -32,3 +33,5 @@ research/**/logs_*.txt
 research/**/*.out
 research/**/*.stdout
 research/**/*.err
+
+*.zipresearch.zip
